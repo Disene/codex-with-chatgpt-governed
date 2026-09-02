@@ -35,7 +35,7 @@ export const DEFAULT_GOVERNANCE_BUDGETS: Record<EffectLevel, GovernanceBudget> =
   L0: budget({}, {}),
   L1: budget({ reviewLane: 1 }, { reviewLane: 1 }),
   L2: budget(
-    { reviewLane: 1, postWriteReadback: 1 },
+    { reviewLane: 1 },
     { reviewLane: 1, formalPreflight: 1, postWriteReadback: 1 }
   ),
   L3: budget(

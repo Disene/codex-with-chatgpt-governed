@@ -20,6 +20,10 @@ describe("minimum sufficient governance policy", () => {
     expect(canAddControl("L2", emptyGovernanceUsage(), "humanGate").allowed).toBe(false);
   });
 
+  it("GOV-003A: ordinary L2 work does not require post-write readback", () => {
+    expect(missingRequiredControls("L2", emptyGovernanceUsage())).not.toContain("postWriteReadback");
+  });
+
   it("GOV-004: L3 requires exactly one final Human Gate", () => {
     const usage = emptyGovernanceUsage();
     expect(missingRequiredControls("L3", usage)).toContain("humanGate");

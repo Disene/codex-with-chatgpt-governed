@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { ExecutionEnvelope } from "./envelope.js";
 
 export type GateStatus = "WAITING" | "GRANTED" | "CONSUMED" | "INVALIDATED";
@@ -25,8 +26,11 @@ export function requestHumanGate(
   envelope: ExecutionEnvelope,
   now = new Date().toISOString()
 ): HumanGate {
+  const requestFingerprint = createHash("sha256")
+    .update(`${envelope.fingerprint}:${now}`)
+    .digest("hex");
   return {
-    id: `gate_${envelope.fingerprint.slice(0, 16)}`,
+    id: `gate_${requestFingerprint.slice(0, 16)}`,
     status: "WAITING",
     envelopeId: envelope.id,
     envelopeFingerprint: envelope.fingerprint,

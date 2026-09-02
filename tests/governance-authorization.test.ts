@@ -35,6 +35,14 @@ function envelope(notes = "initial") {
 }
 
 describe("human authorization", () => {
+  it("creates a new Gate ID for each request, even for the same envelope", () => {
+    const env = envelope();
+    const first = requestHumanGate(env, "2026-09-03T00:01:00.000Z");
+    const second = requestHumanGate(env, "2026-09-03T00:02:00.000Z");
+    expect(first.id).not.toBe(second.id);
+    expect(first.envelopeFingerprint).toBe(second.envelopeFingerprint);
+  });
+
   it("GOV-005: only the accepted human authorization source can grant", () => {
     const gate = requestHumanGate(envelope(), "2026-09-03T00:01:00.000Z");
     expect(() =>
