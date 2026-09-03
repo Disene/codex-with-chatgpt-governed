@@ -20,7 +20,9 @@ The watcher interval defaults to 30 seconds and its timer is `unref()`'d. Presen
 
 Webhook URL and optional signing secret are stored separately under the OS C2C state directory using the existing owner-only JSON writer (`0600`). They are not stored in the repository, Governance state, execution records, or notification content.
 
-Only HTTPS Feishu/Lark custom-bot webhook hosts are accepted.
+Delivery bookkeeping is stored in a separate `governance-notification-state/<workspaceId>.json` sidecar. The watcher reads Governance state but never writes it.
+
+Only HTTPS Feishu/Lark custom-bot webhook hosts are accepted. The destination is validated again at the sender boundary immediately before the request.
 
 ## Message content
 

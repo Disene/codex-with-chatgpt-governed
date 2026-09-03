@@ -4,8 +4,6 @@ import { readSession as readSessionState, type SavedSession } from "../../sessio
 import {
   getPresenceMode,
   readGovernanceState,
-  writeGovernanceState,
-  type GovernanceState,
 } from "../state.js";
 import { detectPresence, type PresenceDecision } from "../presence/index.js";
 import { readFeishuConfig, type FeishuNotificationConfig } from "./config.js";
@@ -13,8 +11,11 @@ import { sendFeishuGateNotification } from "./feishu.js";
 import {
   markFeishuAttempt,
   planGateNotification,
-  type GateNotificationState,
 } from "./router.js";
+import {
+  readNotificationRuntimeState,
+  writeNotificationRuntimeState,
+} from "./state.js";
 
 export const DEFAULT_NOTIFICATION_CHECK_INTERVAL_MS = 30_000;
 
@@ -27,26 +28,13 @@ export interface NotificationTickResult {
 
 export interface NotificationWatcherDeps {
   readState?: typeof readGovernanceState;
-  writeState?: typeof writeGovernanceState;
+  readNotificationState?: typeof readNotificationRuntimeState;
+  writeNotificationState?: typeof writeNotificationRuntimeState;
   readConfig?: typeof readFeishuConfig;
   readSession?: (workspaceId: string) => SavedSession | null;
   detectPresence?: typeof detectPresence;
   send?: typeof sendFeishuGateNotification;
   now?: () => string;
-}
-
-function persistNotificationIfWaiting(params: {
-  workspaceId: string;
-  gateId: string;
-  notification: GateNotificationState;
-  readState: typeof readGovernanceState;
-  writeState: typeof writeGovernanceState;
-}): GovernanceState | null {
-  const latest = params.readState(params.workspaceId);
-  if (!latest?.gate || latest.gate.id !== params.gateId || latest.gate.status !== "WAITING") {
-    return latest;
-  }
-  return params.writeState({ ...latest, notification: params.notification });
 }
 
 export async function evaluateGateNotificationOnce(params: {
@@ -60,7 +48,8 @@ export async function evaluateGateNotificationOnce(params: {
   const deps = params.deps ?? {};
   const logger = params.logger ?? nullLogger;
   const readState = deps.readState ?? readGovernanceState;
-  const writeState = deps.writeState ?? writeGovernanceState;
+  const readNotificationState = deps.readNotificationState ?? readNotificationRuntimeState;
+  const writeNotificationState = deps.writeNotificationState ?? writeNotificationRuntimeState;
   const readConfig = deps.readConfig ?? readFeishuConfig;
   const readSession = deps.readSession ?? readSessionState;
   const presenceDetector = deps.detectPresence ?? detectPresence;
@@ -77,26 +66,23 @@ export async function evaluateGateNotificationOnce(params: {
     return { activeGate: true, sent: false, reason: "feishu-not-configured" };
   }
 
+  const notificationState = readNotificationState(params.workspaceId);
   const presence = presenceDetector({ mode: getPresenceMode(state) });
   const plan = planGateNotification({
     gate: state.gate,
     presence: presence.resolved,
-    previous: state.notification,
+    previous: notificationState?.notification,
     now,
     unknownGraceMs: params.unknownGraceMs,
   });
 
-  if (JSON.stringify(state.notification) !== JSON.stringify(plan.state)) {
-    const persisted = persistNotificationIfWaiting({
+  if (JSON.stringify(notificationState?.notification) !== JSON.stringify(plan.state)) {
+    writeNotificationState({
+      version: 1,
       workspaceId: params.workspaceId,
-      gateId: state.gate.id,
       notification: plan.state,
-      readState,
-      writeState,
+      updatedAt: notificationState?.updatedAt ?? now,
     });
-    if (!persisted?.gate || persisted.gate.status !== "WAITING" || persisted.gate.id !== state.gate.id) {
-      return { activeGate: false, presence, sent: false, reason: "gate-no-longer-waiting" };
-    }
   }
 
   if (!plan.sendFeishu) {
@@ -123,24 +109,23 @@ export async function evaluateGateNotificationOnce(params: {
         chatUrl: session?.url ?? session?.projectUrl ?? null,
       },
     });
-    persistNotificationIfWaiting({
+    writeNotificationState({
+      version: 1,
       workspaceId: params.workspaceId,
-      gateId: state.gate.id,
       notification: markFeishuAttempt({
         state: plan.state,
         ok: true,
         now,
         retryMs: params.retryMs,
       }),
-      readState,
-      writeState,
+      updatedAt: notificationState?.updatedAt ?? now,
     });
     return { activeGate: true, presence, sent: true, reason: plan.reason };
   } catch {
     logger.warn("Gate notification delivery failed; retry scheduled");
-    persistNotificationIfWaiting({
+    writeNotificationState({
+      version: 1,
       workspaceId: params.workspaceId,
-      gateId: state.gate.id,
       notification: markFeishuAttempt({
         state: plan.state,
         ok: false,
@@ -148,8 +133,7 @@ export async function evaluateGateNotificationOnce(params: {
         error: "feishu-send-failed",
         retryMs: params.retryMs,
       }),
-      readState,
-      writeState,
+      updatedAt: notificationState?.updatedAt ?? now,
     });
     return { activeGate: true, presence, sent: false, reason: "feishu-send-failed" };
   }

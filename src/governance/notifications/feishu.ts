@@ -1,6 +1,6 @@
 import { createHmac } from "node:crypto";
 import type { ExecutionEnvelope } from "../gate/envelope.js";
-import type { FeishuNotificationConfig } from "./config.js";
+import { normalizeFeishuWebhookUrl, type FeishuNotificationConfig } from "./config.js";
 
 export interface FeishuGateMessage {
   workspaceName: string;
@@ -55,7 +55,8 @@ export async function sendFeishuGateNotification(params: {
   timestampSeconds?: number;
 }): Promise<void> {
   const fetchImpl = params.fetchImpl ?? fetch;
-  const response = await fetchImpl(params.config.webhookUrl, {
+  const normalizedWebhookUrl = normalizeFeishuWebhookUrl(params.config.webhookUrl);
+  const response = await fetchImpl(normalizedWebhookUrl, {
     method: "POST",
     headers: { "content-type": "application/json; charset=utf-8" },
     body: JSON.stringify(

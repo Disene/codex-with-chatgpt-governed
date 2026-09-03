@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildFeishuGatePayload,
@@ -6,15 +7,30 @@ import {
   createFeishuSignature,
   feishuConfigFile,
   markFeishuAttempt,
+  notificationRuntimeStateFile,
   normalizeFeishuWebhookUrl,
   planGateNotification,
   readFeishuConfig,
+  readNotificationRuntimeState,
+  sendFeishuGateNotification,
   writeFeishuConfig,
+  writeNotificationRuntimeState,
+  type NotificationRuntimeState,
 } from "../src/governance/notifications/index.js";
 import { evaluateGateNotificationOnce } from "../src/governance/notifications/watcher.js";
 import { createExecutionEnvelope } from "../src/governance/gate/envelope.js";
-import { requestHumanGate, type HumanGate } from "../src/governance/gate/authorization.js";
-import { createGovernanceState, type GovernanceState } from "../src/governance/state.js";
+import {
+  grantHumanGate,
+  requestHumanGate,
+  type HumanGate,
+} from "../src/governance/gate/authorization.js";
+import {
+  createGovernanceState,
+  governanceFile,
+  readGovernanceState,
+  writeGovernanceState,
+  type GovernanceState,
+} from "../src/governance/state.js";
 import { cleanup, makeTmpDir } from "./helpers.js";
 
 function envelope() {
@@ -201,6 +217,32 @@ describe("Feishu webhook adapter", () => {
     expect(() => normalizeFeishuWebhookUrl("http://open.feishu.cn/open-apis/bot/v2/hook/x")).toThrow();
   });
 
+  it.each([
+    "https://example.com/open-apis/bot/v2/hook/evil",
+    "http://open.feishu.cn/open-apis/bot/v2/hook/evil",
+    "https://open.feishu.cn/open-apis/bot/v2/other/evil",
+    "https://open.feishu.cn/open-apis/bot/v2/hook/evil?redirect=1",
+    "https://open.larksuite.com/open-apis/bot/v2/hook/evil#fragment",
+  ])("rejects an invalid direct config before fetch: %s", async (webhookUrl) => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ code: 0, msg: "success" }), { status: 200 })
+    );
+
+    await expect(
+      sendFeishuGateNotification({
+        config: {
+          version: 1,
+          enabled: true,
+          webhookUrl,
+          updatedAt: "2026-09-03T00:00:00.000Z",
+        },
+        message: { workspaceName: "Demo", envelope: envelope() },
+        fetchImpl,
+      })
+    ).rejects.toThrow();
+    expect(fetchImpl).toHaveBeenCalledTimes(0);
+  });
+
   it("generates Feishu signatures and never embeds secrets in message content", () => {
     expect(createFeishuSignature("secret", 1_700_000_000)).toBe(
       "fiWS2+gh28DOydAv7hzONH/mDn9+b1Y4Y5ivXWXy8vA="
@@ -234,6 +276,7 @@ describe("notification watcher tick", () => {
       envelope: env,
       gate: waiting,
     };
+    let notificationState: NotificationRuntimeState | null = null;
     const send = vi.fn(async () => undefined);
 
     const result = await evaluateGateNotificationOnce({
@@ -241,9 +284,10 @@ describe("notification watcher tick", () => {
       workspaceName: "Demo",
       deps: {
         readState: () => state,
-        writeState: (next) => {
-          state = { ...next };
-          return state;
+        readNotificationState: () => notificationState,
+        writeNotificationState: (next) => {
+          notificationState = { ...next };
+          return notificationState;
         },
         readConfig: () => ({
           version: 1,
@@ -266,7 +310,9 @@ describe("notification watcher tick", () => {
 
     expect(result.sent).toBe(true);
     expect(send).toHaveBeenCalledTimes(1);
-    expect(state.notification?.feishuNotifiedAt).toBe("2026-09-03T00:10:00.000Z");
+    expect(notificationState?.notification?.feishuNotifiedAt).toBe(
+      "2026-09-03T00:10:00.000Z"
+    );
   });
 
   it("does nothing after the Gate is no longer WAITING", async () => {
@@ -282,7 +328,6 @@ describe("notification watcher tick", () => {
       workspaceId: "workspace123",
       deps: {
         readState: () => state,
-        writeState: (next) => next,
         readConfig: () => null,
         send,
       },
@@ -291,52 +336,77 @@ describe("notification watcher tick", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
-  it("does not overwrite a Gate that becomes GRANTED during notification bookkeeping", async () => {
-    const env = envelope();
-    const waiting = requestHumanGate(env, "2026-09-03T00:00:00.000Z");
-    const granted: GovernanceState = {
-      ...createGovernanceState("workspace123"),
-      envelope: env,
-      gate: { ...waiting, status: "GRANTED" },
-    };
-    let reads = 0;
-    let written: GovernanceState | null = null;
-    const send = vi.fn(async () => undefined);
+  it("keeps a persisted GRANTED Gate when notification bookkeeping writes afterward", async () => {
+    const dir = makeTmpDir("notification-grant-race");
+    const previousStateDir = process.env.C2C_STATE_DIR;
+    process.env.C2C_STATE_DIR = dir;
+    try {
+      const workspaceId = "workspace123";
+      const env = envelope();
+      const waiting = requestHumanGate(env, "2026-09-03T00:00:00.000Z");
+      writeGovernanceState({
+        ...createGovernanceState(workspaceId),
+        envelope: env,
+        gate: waiting,
+      });
+      let watcherGovernanceReads = 0;
 
-    const result = await evaluateGateNotificationOnce({
-      workspaceId: "workspace123",
-      deps: {
-        readState: () => {
-          reads += 1;
-          return reads === 1
-            ? { ...createGovernanceState("workspace123"), envelope: env, gate: waiting }
-            : granted;
+      const result = await evaluateGateNotificationOnce({
+        workspaceId,
+        deps: {
+          readState: (id) => {
+            watcherGovernanceReads += 1;
+            return readGovernanceState(id);
+          },
+          readNotificationState: readNotificationRuntimeState,
+          writeNotificationState: (next) => {
+            const latest = readGovernanceState(workspaceId);
+            if (!latest?.gate) throw new Error("missing Gate during race setup");
+            writeGovernanceState({
+              ...latest,
+              gate: grantHumanGate(
+                latest.gate,
+                { source: "chatgpt-user", actor: "human" },
+                "2026-09-03T00:00:00.500Z"
+              ),
+            });
+            return writeNotificationRuntimeState(next);
+          },
+          readConfig: () => ({
+            version: 1,
+            enabled: true,
+            webhookUrl: "https://open.feishu.cn/open-apis/bot/v2/hook/example",
+            updatedAt: "2026-09-03T00:00:00.000Z",
+          }),
+          readSession: () => null,
+          detectPresence: () => ({
+            mode: "AUTO",
+            resolved: "PRESENT",
+            reason: "active-unlocked",
+            idleAwayAfterMs: 600_000,
+            signals: { screenLocked: false, idleMs: 100 },
+          }),
+          now: () => "2026-09-03T00:00:01.000Z",
         },
-        writeState: (next) => {
-          written = next;
-          return next;
-        },
-        readConfig: () => ({
-          version: 1,
-          enabled: true,
-          webhookUrl: "https://open.feishu.cn/open-apis/bot/v2/hook/example",
-          updatedAt: "2026-09-03T00:00:00.000Z",
-        }),
-        readSession: () => null,
-        detectPresence: () => ({
-          mode: "AUTO",
-          resolved: "PRESENT",
-          reason: "active-unlocked",
-          idleAwayAfterMs: 600_000,
-          signals: { screenLocked: false, idleMs: 100 },
-        }),
-        send,
-        now: () => "2026-09-03T00:00:01.000Z",
-      },
-    });
+      });
 
-    expect(result.reason).toBe("gate-no-longer-waiting");
-    expect(written).toBeNull();
-    expect(send).not.toHaveBeenCalled();
+      expect(result.reason).toBe("present");
+      expect(watcherGovernanceReads).toBe(1);
+      expect(readGovernanceState(workspaceId)?.gate?.status).toBe("GRANTED");
+      expect(readGovernanceState(workspaceId)).not.toHaveProperty("notification");
+      expect(readNotificationRuntimeState(workspaceId)?.notification?.gateId).toBe(waiting.id);
+      expect(notificationRuntimeStateFile(workspaceId)).not.toBe(governanceFile(workspaceId));
+      expect(notificationRuntimeStateFile(workspaceId)).not.toBe(feishuConfigFile(workspaceId));
+      if (process.platform !== "win32") {
+        expect(fs.statSync(path.dirname(notificationRuntimeStateFile(workspaceId))).mode & 0o777).toBe(
+          0o700
+        );
+        expect(fs.statSync(notificationRuntimeStateFile(workspaceId)).mode & 0o777).toBe(0o600);
+      }
+    } finally {
+      if (previousStateDir === undefined) delete process.env.C2C_STATE_DIR;
+      else process.env.C2C_STATE_DIR = previousStateDir;
+      cleanup(dir);
+    }
   });
 });
