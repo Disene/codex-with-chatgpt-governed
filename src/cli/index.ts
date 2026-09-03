@@ -66,6 +66,13 @@ import {
   type HumanGateDecision,
 } from "../governance/gate/lifecycle.js";
 import type { ExecutionEnvelopeInput } from "../governance/gate/envelope.js";
+import {
+  clearGlobalFeishuConfig,
+  feishuConfigSummary,
+  readEffectiveFeishuConfig,
+  sendFeishuSetupTestNotification,
+} from "../governance/notifications/index.js";
+import { configureGlobalFeishuNotifications } from "./notification-setup.js";
 
 const program = new Command();
 
@@ -975,6 +982,100 @@ gate
       });
       if (opts.json) say(JSON.stringify(gateResultPayload(result)));
       else check("Human Gate 已消费，可以立即执行精确的 consequential action");
+    } catch (error) {
+      handleCliError(error, opts.json);
+    }
+  });
+
+const notifications = governance
+  .command("notifications")
+  .description("Configure the machine-wide Feishu notification channel");
+
+notifications
+  .command("status", { isDefault: true })
+  .description("Show redacted Feishu notification configuration status")
+  .option("-w, --workspace <path>")
+  .option("--json", "machine-readable output", false)
+  .action((opts: { workspace?: string; json: boolean }) => {
+    try {
+      const workspace = new Workspace(resolveWorkspace(opts.workspace));
+      const effective = readEffectiveFeishuConfig(workspace.id);
+      const summary = feishuConfigSummary(effective.config);
+      if (opts.json) {
+        say(JSON.stringify({ ok: true, ...summary, source: effective.source }));
+        return;
+      }
+      say(`飞书通知：${summary.configured ? "已配置" : "未配置"}`);
+      say(`状态：${summary.enabled ? "已启用" : "未启用"}`);
+      say(`签名校验：${summary.signed ? "已配置" : "未配置"}`);
+      say(
+        `配置来源：${effective.source === "workspace" ? "当前项目" : effective.source === "global" ? "本机默认" : "无"}`
+      );
+    } catch (error) {
+      handleCliError(error, opts.json);
+    }
+  });
+
+notifications
+  .command("configure")
+  .description("Securely configure the machine-wide Feishu webhook in this terminal")
+  .option("--json", "machine-readable output", false)
+  .action(async (opts: { json: boolean }) => {
+    try {
+      const summary = await configureGlobalFeishuNotifications();
+      if (opts.json) {
+        say(JSON.stringify({ ok: true, ...summary, source: "global" }));
+        return;
+      }
+      check("飞书通知配置已保存");
+      check(`签名校验：${summary.signed ? "已配置" : "未配置"}`);
+    } catch (error) {
+      handleCliError(error, opts.json);
+    }
+  });
+
+notifications
+  .command("clear")
+  .description("Clear the machine-wide Feishu notification configuration")
+  .option("--json", "machine-readable output", false)
+  .action((opts: { json: boolean }) => {
+    try {
+      clearGlobalFeishuConfig();
+      if (opts.json) say(JSON.stringify({ ok: true, cleared: true, source: "global" }));
+      else check("默认飞书通知配置已清除");
+    } catch (error) {
+      handleCliError(error, opts.json);
+    }
+  });
+
+notifications
+  .command("test")
+  .description("Send one notify-only Feishu setup test message")
+  .option("-w, --workspace <path>")
+  .option("--json", "machine-readable output", false)
+  .action(async (opts: { workspace?: string; json: boolean }) => {
+    try {
+      const workspace = new Workspace(resolveWorkspace(opts.workspace));
+      const effective = readEffectiveFeishuConfig(workspace.id);
+      if (!effective.config || !effective.config.enabled) {
+        throw new Error("Feishu notifications are not configured and enabled");
+      }
+      await sendFeishuSetupTestNotification({
+        config: effective.config,
+        message: { workspaceName: workspace.name },
+      });
+      if (opts.json) {
+        say(
+          JSON.stringify({
+            ok: true,
+            sent: true,
+            signed: Boolean(effective.config.secret),
+            source: effective.source,
+          })
+        );
+        return;
+      }
+      check("飞书测试通知已发送");
     } catch (error) {
       handleCliError(error, opts.json);
     }
