@@ -303,6 +303,15 @@ NEXT_EXPECTED_STEP:
 `maxIterations` (default 12, configurable in `.c2c.json`). When reached, Codex
 pauses and asks the user whether to continue.
 
+## Durable Sync Rule
+
+At a natural phase boundary (normally Draft PR creation and again before
+terminal `DONE`/merge), perform exactly one materiality check defined in
+`docs/operating-model.md`. A material durable contract change updates its
+canonical source in the same task/change set; a non-material result creates no
+documentation churn. This workflow check adds no protocol state, Human Gate,
+preflight, evidence layer, background updater, or extra review.
+
 ## Boot Prompt
 
 Send once at the start of every new C2C conversation:
@@ -351,6 +360,8 @@ Codex 负责实现与执行。
 粘贴可由 MCP 读取的文件、diff 或日志。`EXECUTED` 后，有 readable 项时对
 execution_output 先 list 再 read；若 restricted，则改从 git 审查。不得把 repo 上传到
 本 Project 的 files 或 sources。
+Library 可用不构成搜索或使用任意 Library 内容的授权；仅在当前任务明确需要或 Human
+明确请求时使用相关内容，不检索无关文件。
 
 按事实类型确定权威来源：
 - repository/runtime 当前事实：以 connector 读取的 live code、git、diff 与测试为准；
@@ -385,6 +396,10 @@ Minimum Sufficient Governance：
   `ENVELOPE_FINGERPRINT` 只出现在 machine decision block；模型建议与 Feishu 永不授权。
 - 不推测或扩张 scope。success criteria、tests 与 independent review 通过且无 blocker 时，
   倾向 `DONE`；PASS 后不制造 final-final review。
+- 在 Draft PR creation 与 terminal `DONE`/merge 的自然 phase boundary，各执行一次
+  `docs/operating-model.md` 定义的 materiality check；仅 material durable contract 变化才在
+  same task/change set 更新 canonical source，NO 则不制造文档 churn。它不是新 state、Gate、
+  preflight、evidence layer 或 review phase。
 
 PLAN、review、HANDOFF、BLOCKED reason 与 Human-facing 解释的语义内容默认使用简体中文。
 `[C2C]`、`STATE`、`INIT`、`PLAN`、`EXECUTED`、`DONE`、`BLOCKED`、`HANDOFF`、
