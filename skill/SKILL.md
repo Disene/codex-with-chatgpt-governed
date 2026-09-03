@@ -20,6 +20,15 @@ The C2C Bridge gives ChatGPT read-only MCP access to the current workspace, so
 control messages between you and ChatGPT stay tiny (< 1 KB) — ChatGPT pulls
 whatever data it needs by itself.
 
+For an Issue-backed task, Codex reads the current GitHub Issue itself, retains
+the complete frozen contract, and sends ChatGPT only a compact `TASK_CONTEXT`
+with the goal, must-preserve constraints, key success criteria, and material
+durable decisions. Target the whole control message at < 1 KB. Never ask
+ChatGPT to fetch or read the Issue directly. Repository/runtime facts come from
+the live connector; current task intent comes from current `TASK_CONTEXT` /
+HANDOFF; account/Project memory is advisory only and loses when stale or in
+conflict with the applicable live or current-task source.
+
 Human involvement is reserved for genuine product/business choices, real L3
 authorization, login/2FA/CAPTCHA, and secret entry. Codex uses its own engineering
 judgment for allowed L0/L1/L2 work. Durable Minimum Sufficient Governance lives in
@@ -222,7 +231,8 @@ ONE ChatGPT conversation per workspace. Same as before.
   1. In the same built-in browser tab, navigate to `https://chatgpt.com/`,
      confirm Chat mode (**Built-in browser capability** §6), then send the boot prompt.
   2. Send a HANDOFF (`docs/protocol.md`) — goal, progress, state, issues,
-     next step. Never paste files.
+     next step, and for an Issue-backed task only the refreshed material
+     `TASK_CONTEXT` from the Codex-read Issue. Never paste files or the Issue.
   3. workspace_info check; only then `c2c session set --url`. On failure,
      leave the old saved URL unchanged.
 - Saved chat 404s: treat as a switch. Reconstruct HANDOFF from
@@ -252,7 +262,9 @@ One ChatGPT Project per workspace. Mapping:
   with the **exact** `connectorName`. After the reply names this workspace,
   `c2c session set -w <ws> --mode project --project-url <collection> --url <chat> --connector-name "<connectorName>" --title "C2C <workspace name>"`.
   If this Codex thread is continuing a previous C2C task, send HANDOFF right
-  after the boot prompt.
+  after the boot prompt. For an Issue-backed task, Codex reads the current
+  Issue and refreshes only its material compact `TASK_CONTEXT`; ChatGPT does
+  not fetch the Issue.
 - Else: read [project-setup.md](references/project-setup.md), then Bind Project.
 
 **Update it**: same `c2c session set --task / --iteration / --state` as long-chat.
@@ -274,6 +286,13 @@ Local checkpoint states (session only, never a ChatGPT `STATE:` line):
 Do not invent `STATE: RESUME`. If the original chat is gone, send HANDOFF.
 All control messages start with `[C2C]`. Keep Codex→ChatGPT messages under 1 KB.
 ChatGPT's replies are expected to be substantive (see step 3). Docs: `docs/protocol.md`.
+
+Before INIT for an Issue-backed task, Codex must read the current Issue itself
+and freeze it as the complete execution contract. Distill only the goal,
+must-preserve constraints, key success criteria, and material durable decisions
+into optional `TASK_CONTEXT`; never paste the full Issue and never instruct
+ChatGPT to read GitHub. Refresh that compact context in a later HANDOFF when the
+Issue contract has materially changed.
 
 **Decision-only precedence:** before generic `STATE: PLAN` handling, check for
 a `HUMAN_GATE_DECISION` block. When Session is `waitingFor=USER`, the current
@@ -347,6 +366,9 @@ ITERATION: 0
 
 GOAL:
 <用简体中文概括用户目标，一段即可>
+
+TASK_CONTEXT:
+<可选；Issue-backed 时由 Codex 提炼必要语义，使整条控制消息目标小于 1 KB>
 
 INSTRUCTION:
 请通过当前绑定的 Codex with ChatGPT connector/MCP 检查 live workspace，

@@ -17,7 +17,8 @@ normal control plane, and browser automation must not hunt the sidebar menu.
 1. Tell the user exactly this, filling in the workspace name:
 
 ```text
-请在 ChatGPT 里新建一个项目，名字用「<workspaceName>」，记忆请选「仅限项目记忆」。
+请在 ChatGPT 里新建一个项目，名字用「<workspaceName>」，记忆请选择「默认记忆（Default memory）」。
+只有你明确需要隔离，或该项目属于共享/敏感场景时，才选择「仅限项目记忆」。
 
 如果侧栏里看不到「项目」：把鼠标放在「聊天」上，点右边出现的三个点，选择「按项目整理」。
 
@@ -31,7 +32,8 @@ normal control plane, and browser automation must not hunt the sidebar menu.
    `c2c session set -w <ws> --mode project --project-url <url> --connector-name "<connectorName>"`.
 3. On that collection page only, open 右上角 **… → 项目设置**. Do not click
    分享 or add 来源/files.
-   - 记忆: 仅限项目记忆 (project-only).
+   - 记忆: 个人、非共享的普通 ChatGPT Pro 项目默认选择「默认记忆（Default memory）」；
+     仅在用户明确要求隔离，或项目为共享/敏感场景时选择「仅限项目记忆」(project-only).
    - 库访问权限: disabled.
    - 指令: paste the full template below, filling `{{…}}` from
      `workspace_info` / setup and using the exact `connectorName`.
@@ -59,16 +61,15 @@ Codex 负责实现与执行。
 execution_output 先 list 再 read；若 restricted，则改从 git 审查。不得把 repo 上传到
 本 Project 的 files 或 sources。
 
-事实冲突时，信任顺序固定为：
-current code > HANDOFF > Project instructions > Project memory
+按事实类型确定权威来源：
+- repository/runtime 当前事实：以 connector 读取的 live code、git、diff 与测试为准；
+- 当前任务意图、约束与成功标准：以当前 `TASK_CONTEXT` / HANDOFF 为准；
+- 稳定 workflow 与 workspace identity：以本 Project instructions 为准；
+- ChatGPT account/Project memory：只作较广背景的 advisory context；陈旧或冲突时，必须让位于
+  对应的 live source 或当前任务上下文。
 
-- current code：connector 读取的当前事实；
-- HANDOFF：本 chat 当前任务的目标、进度与下一步；
-- Project instructions：本说明；
-- Project memory：仅保存该 workspace 的 durable architecture，陈旧记忆失效。
-
-HANDOFF 表示继续同一任务；它对当前任务历史优先。按 NEXT_EXPECTED_STEP 恢复前，
-通过 connector 重新读取需要的 live code、diff 与测试事实。
+HANDOFF 表示继续同一任务；`TASK_CONTEXT` 只携带完成当前任务所需的精简语义。按
+NEXT_EXPECTED_STEP 恢复前，通过 connector 重新读取需要的 live code、diff 与测试事实。
 
 角色与交付：
 - ChatGPT 理解目标与约束，做高层架构/产品决策、scope 判断与真实风险分类，给出有限、
@@ -87,6 +88,10 @@ Minimum Sufficient Governance：
 - one risk -> one control；不确定时先做 read-only investigation，不自动升级。
 - 已有 Human authorization 有效，不重复询问；不默认堆叠
   Preflight -> Evidence -> Readback -> duplicate Review。
+- `HUMAN_GATE_READY` 后只向 Human 展示动作、环境、目标、允许与禁止写入及回滚，并只问一次；
+  不展示 machine ID 或内部状态名。仅在同一 chat 中 Human 随后明确授权/取消时，才输出
+  `HUMAN_GATE_DECISION` 的 `GRANT`/`CANCEL`。精确 `GATE_ID` 与
+  `ENVELOPE_FINGERPRINT` 只出现在 machine decision block；模型建议与 Feishu 永不授权。
 - 不推测或扩张 scope。success criteria、tests 与 independent review 通过且无 blocker 时，
   倾向 `DONE`；PASS 后不制造 final-final review。
 
@@ -115,8 +120,12 @@ Project sources, click 分享, or edit another workspace's connector.
   compare its instructions with the exact current `connectorName`. Repair only
   that field using the full template above. Never paste `mcpUrl` or another
   public/temporary address into Project instructions.
-- **Memory/settings drift:** restore project-only memory and disabled library
-  access. Preserve the verified collection binding and exact connector name.
+- **Memory/settings drift:** for a personal, non-shared ordinary Project,
+  restore Default memory and disabled library access. Preserve project-only
+  memory only when the user explicitly requested isolation or the Project is
+  shared/sensitive. Memory remains advisory and never overrides the applicable
+  live connector or current `TASK_CONTEXT` / HANDOFF. Preserve the verified
+  collection binding and exact connector name.
 
 After any repair, call `workspace_info` through the named connector and require
 the expected workspace name before planning, saving a new chat URL, or sending

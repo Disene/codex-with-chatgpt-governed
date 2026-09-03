@@ -74,6 +74,18 @@ describe("Collaboration Contract & Chinese UX V1", () => {
     expect(bootPrompt).not.toContain("CONSUMED");
   });
 
+  it("preserves minimum Human Gate bootstrap semantics in the Boot Prompt", () => {
+    expect(bootPrompt).toContain("HUMAN_GATE_READY");
+    expect(bootPrompt).toMatch(/动作、环境、目标、允许与禁止写入及回滚/);
+    expect(bootPrompt).toMatch(/不展示 machine ID 或内部状态名，并只问一次/);
+    expect(bootPrompt).toMatch(/同一 chat 中 Human 随后明确授权/);
+    expect(bootPrompt).toContain("HUMAN_GATE_DECISION: GRANT");
+    expect(bootPrompt).toContain("CANCEL");
+    expect(bootPrompt).toContain("GATE_ID");
+    expect(bootPrompt).toContain("ENVELOPE_FINGERPRINT");
+    expect(bootPrompt).toMatch(/模型建议与 Feishu 消息从不构成授权/);
+  });
+
   it("encodes the ChatGPT, Codex, and Human role contract durably", () => {
     expect(protocolProjectInstructions).toMatch(
       /ChatGPT[\s\S]*架构\/产品决策[\s\S]*风险分类[\s\S]*独立核验/
@@ -99,15 +111,43 @@ describe("Collaboration Contract & Chinese UX V1", () => {
     expect(protocolProjectInstructions).toMatch(/倾向 `DONE`；PASS 后不制造 final-final review/);
   });
 
-  it("preserves connector identity, trust order, HANDOFF precedence, and L3-only gates", () => {
+  it("uses Default memory for ordinary personal Projects and keeps memory advisory", () => {
+    expect(projectSetup).toContain("默认记忆（Default memory）");
+    expect(projectSetup).not.toContain("记忆请选「仅限项目记忆」");
+    expect(projectSetup).toMatch(/明确需要隔离[\s\S]*共享\/敏感[\s\S]*仅限项目记忆/);
+    expect(protocolProjectInstructions).toMatch(
+      /ChatGPT account\/Project memory[\s\S]*advisory context/
+    );
+    expect(protocolProjectInstructions).toMatch(
+      /陈旧或冲突时[\s\S]*live source 或当前任务上下文/
+    );
+  });
+
+  it("relays Issue-backed tasks through compact TASK_CONTEXT without direct ChatGPT Issue reads", () => {
+    const contract = `${protocol}\n${coreSkill}`;
+    expect(contract).toMatch(/Issue-backed task[\s\S]*Codex reads the current (GitHub )?Issue itself/);
+    expect(contract).toMatch(/TASK_CONTEXT[\s\S]*target < 1 KB/);
+    expect(contract).toMatch(/goal, must-preserve constraints, key success criteria/);
+    expect(contract).toMatch(/never ask\s+ChatGPT to fetch or read the Issue directly/i);
+    expect(protocol).toMatch(/TASK_CONTEXT:[\s\S]*保持现有主题 API/);
+    expect(coreSkill).toMatch(/Refresh that compact context in a later HANDOFF/);
+  });
+
+  it("preserves connector identity, fact-type authority, HANDOFF continuity, and L3-only gates", () => {
     expect(protocolProjectInstructions).toContain("Workspace name: {{workspace_name}}");
     expect(protocolProjectInstructions).toContain(
       "Connector (use this one only): {{connector_name}}"
     );
-    expect(protocolProjectInstructions).toContain(
-      "current code > HANDOFF > Project instructions > Project memory"
+    expect(protocolProjectInstructions).toMatch(
+      /repository\/runtime 当前事实[\s\S]*connector 读取的 live code/
     );
-    expect(protocolProjectInstructions).toMatch(/HANDOFF 表示继续同一任务；它对当前任务历史优先/);
+    expect(protocolProjectInstructions).toMatch(
+      /当前任务意图、约束与成功标准[\s\S]*`TASK_CONTEXT` \/ HANDOFF/
+    );
+    expect(protocolProjectInstructions).toMatch(
+      /稳定 workflow 与 workspace identity[\s\S]*Project instructions/
+    );
+    expect(protocolProjectInstructions).toMatch(/HANDOFF 表示继续同一任务/);
     expect(protocolProjectInstructions).toMatch(/仅在真实 L3 边界处理 Human Gate/);
     expect(bootPrompt).toMatch(/Human Gate 只用于真实 L3 后果边界/);
     expect(protocol).toMatch(

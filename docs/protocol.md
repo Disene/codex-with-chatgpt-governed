@@ -5,7 +5,8 @@ Control plane: the Codex host-provided built-in browser / browser-use capability
 Computer Use is not the normal control plane.
 Data plane: MCP (ChatGPT pulls files, diffs, search results itself).
 
-Never mix the two: control messages carry state, never content.
+Never mix the two: control messages carry compact task state and semantics,
+never file bodies, diffs, or logs.
 
 ## States
 
@@ -53,6 +54,13 @@ just to resume.
 Every control message starts with `[C2C]` and key-value headers, then sections.
 Keep messages < 1 KB. No diffs, no logs, no file bodies.
 
+`TASK_CONTEXT` is an optional compact semantic brief. For an Issue-backed task,
+Codex reads the current Issue itself before INIT, retains the complete frozen
+contract, and distills only the goal, must-preserve constraints, key success
+criteria, and material durable decisions into a target < 1 KB control message.
+ChatGPT uses that brief with live MCP facts; it is never asked to fetch or read
+the GitHub Issue directly.
+
 ### INIT (Codex → ChatGPT)
 
 ```
@@ -63,6 +71,9 @@ ITERATION: 0
 
 GOAL:
 实现带持久化偏好的深色模式。
+
+TASK_CONTEXT:
+保持现有主题 API；成功标准为重载后保留偏好并通过相关测试。
 
 INSTRUCTION:
 请通过当前绑定的 Codex with ChatGPT connector/MCP 检查 live workspace，
@@ -250,11 +261,16 @@ NEEDS:
 
 Right after the boot prompt, Codex sends a HANDOFF so the new chat can
 continue — a brief, never a data dump (the new chat re-reads code via MCP).
-Project instructions and project-only memory hold durable workspace identity.
-HANDOFF still wins for the current task:
+For an Issue-backed task, Codex refreshes only the material `TASK_CONTEXT` from
+the current Codex-read Issue; it does not paste the Issue or ask ChatGPT to read
+it. Authority depends on the fact type:
 
-Trust order: connector (current code) > HANDOFF (this task) > Project
-instructions > Project memory.
+- repository/runtime facts: the live connector wins;
+- current task intent, constraints, and success criteria: current
+  `TASK_CONTEXT` / HANDOFF wins;
+- stable workflow and workspace identity: Project instructions win;
+- account/Project memory: advisory context only; stale or conflicting memory
+  loses to the applicable live or current-task source.
 
 ```
 [C2C]
@@ -264,6 +280,9 @@ ITERATION: 4
 
 ORIGINAL_GOAL:
 实现带持久化用户偏好的深色模式。
+
+TASK_CONTEXT:
+保持现有主题 API；成功标准为重载后保留偏好并通过相关测试。
 
 PROGRESS:
 - Iter 1-2：已实现主题 context 与开关，审查通过。
@@ -302,8 +321,12 @@ PLAN、review、HANDOFF 与 Human-facing 解释的语义内容默认使用简体
 `HUMAN_GATE`、`GRANT`、`CANCEL` 及既有字段名保持 English，不翻译或另设别名。
 
 HANDOFF 表示继续同一任务：以其当前任务历史为准，并通过 MCP 复核实时事实。
-Human Gate 只用于真实 L3 后果边界。收到 `EXECUTED` 后必须独立检查真实结果，
-不能仅凭 Codex 的完成声明作出 `DONE`。输出有限、具体、可执行且有实质依据的 C2C 控制消息。
+Human Gate 只用于真实 L3 后果边界。收到 `HUMAN_GATE_READY` 时，以简体中文向 Human
+说明动作、环境、目标、允许与禁止写入及回滚，不展示 machine ID 或内部状态名，并只问一次。
+仅在同一 chat 中 Human 随后明确授权时输出 `HUMAN_GATE_DECISION: GRANT`；明确取消时输出
+`CANCEL`。精确 `GATE_ID` 与 `ENVELOPE_FINGERPRINT` 只放在 machine decision block；
+模型建议与 Feishu 消息从不构成授权。收到 `EXECUTED` 后必须独立检查真实结果，不能仅凭
+Codex 的完成声明作出 `DONE`。输出有限、具体、可执行且有实质依据的 C2C 控制消息。
 ```
 
 ## Project instructions
@@ -329,16 +352,15 @@ Codex 负责实现与执行。
 execution_output 先 list 再 read；若 restricted，则改从 git 审查。不得把 repo 上传到
 本 Project 的 files 或 sources。
 
-事实冲突时，信任顺序固定为：
-current code > HANDOFF > Project instructions > Project memory
+按事实类型确定权威来源：
+- repository/runtime 当前事实：以 connector 读取的 live code、git、diff 与测试为准；
+- 当前任务意图、约束与成功标准：以当前 `TASK_CONTEXT` / HANDOFF 为准；
+- 稳定 workflow 与 workspace identity：以本 Project instructions 为准；
+- ChatGPT account/Project memory：只作较广背景的 advisory context；陈旧或冲突时，必须让位于
+  对应的 live source 或当前任务上下文。
 
-- current code：connector 读取的当前事实；
-- HANDOFF：本 chat 当前任务的目标、进度与下一步；
-- Project instructions：本说明；
-- Project memory：仅保存该 workspace 的 durable architecture，陈旧记忆失效。
-
-HANDOFF 表示继续同一任务；它对当前任务历史优先。按 NEXT_EXPECTED_STEP 恢复前，
-通过 connector 重新读取需要的 live code、diff 与测试事实。
+HANDOFF 表示继续同一任务；`TASK_CONTEXT` 只携带完成当前任务所需的精简语义。按
+NEXT_EXPECTED_STEP 恢复前，通过 connector 重新读取需要的 live code、diff 与测试事实。
 
 角色与交付：
 - ChatGPT 理解目标与约束，做高层架构/产品决策、scope 判断与真实风险分类，给出有限、
@@ -357,6 +379,10 @@ Minimum Sufficient Governance：
 - one risk -> one control；不确定时先做 read-only investigation，不自动升级。
 - 已有 Human authorization 有效，不重复询问；不默认堆叠
   Preflight -> Evidence -> Readback -> duplicate Review。
+- `HUMAN_GATE_READY` 后只向 Human 展示动作、环境、目标、允许与禁止写入及回滚，并只问一次；
+  不展示 machine ID 或内部状态名。仅在同一 chat 中 Human 随后明确授权/取消时，才输出
+  `HUMAN_GATE_DECISION` 的 `GRANT`/`CANCEL`。精确 `GATE_ID` 与
+  `ENVELOPE_FINGERPRINT` 只出现在 machine decision block；模型建议与 Feishu 永不授权。
 - 不推测或扩张 scope。success criteria、tests 与 independent review 通过且无 blocker 时，
   倾向 `DONE`；PASS 后不制造 final-final review。
 
