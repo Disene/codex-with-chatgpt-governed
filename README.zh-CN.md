@@ -30,8 +30,8 @@ Agent（Codex），然后去倒杯咖啡：
 2. 下载：把 https://github.com/XiaoDuoYa/codex-with-chatgpt 克隆到
    ~/codex-with-chatgpt（已存在就 git pull 更新）。
 3. 构建：在该目录里执行 corepack pnpm install 和 corepack pnpm build。
-4. 安装 Skill：把仓库里的 skill/SKILL.md 复制到
-   ~/.codex/skills/codex-with-chatgpt/SKILL.md，并把文件中
+4. 安装 Skill：把完整的 `skill/` 目录复制到
+   `~/.codex/skills/codex-with-chatgpt/`，并把已安装 `SKILL.md` 中
    "The codex-with-chatgpt checkout lives at:" 那一行的路径改成实际克隆路径。
 5. 首次配置：按 SKILL.md 里的 first-time setup 流程执行
   （运行 c2c setup，用内置浏览器打开 ChatGPT 配置连接器并输入配对码）。
@@ -47,7 +47,8 @@ Agent（Codex），然后去倒杯咖啡：
 
 ## 安装 → 配置 → 使用（手动版）
 
-1. 安装 Codex Skill：把 `skill/` 复制到 `~/.codex/skills/codex-with-chatgpt/`。
+1. 安装 Codex Skill：把完整的 `skill/` 目录复制到
+   `~/.codex/skills/codex-with-chatgpt/`。
 2. 对 Codex 说：**"使用 Codex with ChatGPT 完成首次配置。"**
 3. 之后正常使用：**"使用 Codex with ChatGPT，帮我实现 XXX。"**
 
@@ -84,7 +85,7 @@ Ready.
              │   推理 / 规划 / 审查      │
              └──────────┬──────────▲─────┘
                         │          │
-               MCP      │          │ Computer Use
+               MCP      │          │ 内置浏览器
               数据面    │          │ 控制面（消息 < 1 KB）
                         ▼          │
              ┌─────────────────────┐
@@ -101,9 +102,10 @@ Ready.
                                               └─────────────────────┘
 ```
 
-- **控制面（Computer Use）**：Codex 与 ChatGPT 之间只交换极小的结构化 `[C2C]`
-  状态消息——`INIT → PLAN → EXECUTED → REVIEW → DONE`。绝不粘贴 diff、日志
-  或文件内容。
+- **控制面（内置 browser / browser-use capability）**：Codex 与 ChatGPT
+  之间只交换极小的结构化 `[C2C]` 状态消息——
+  `INIT → PLAN → EXECUTED → REVIEW → DONE`。基于截图的通用 Computer Use
+  不是普通控制面；绝不粘贴 diff、日志或文件内容。
 - **数据面（MCP）**：ChatGPT 缺什么自己拉什么，共 9 个只读工具：
   `workspace_info`、`list_directory`、`read_file`、`search_workspace`、
   `git_status`、`git_diff`、`test_status`、`execution_summary`、
