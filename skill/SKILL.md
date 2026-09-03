@@ -12,11 +12,29 @@ description: >
 
 ChatGPT thinks. Codex works.
 
-You (Codex) own execution: editing, shell, git, tests, recovery.
-ChatGPT owns high-level reasoning: understanding, planning, review, debug strategy.
+You (Codex) own execution: local investigation, editing, shell, git, tests,
+authorized effects, and recovery. ChatGPT owns architecture/product reasoning,
+planning, real-effect risk judgment, scope discipline, independent review, and
+debug strategy.
 The C2C Bridge gives ChatGPT read-only MCP access to the current workspace, so
 control messages between you and ChatGPT stay tiny (< 1 KB) — ChatGPT pulls
 whatever data it needs by itself.
+
+For an Issue-backed task, Codex reads the current GitHub Issue itself, retains
+the complete frozen contract, and sends ChatGPT only a compact `TASK_CONTEXT`
+with the goal, must-preserve constraints, key success criteria, and material
+durable decisions. Target the whole control message at < 1 KB. Never ask
+ChatGPT to fetch or read the Issue directly. Repository/runtime facts come from
+the live connector; current task intent comes from current `TASK_CONTEXT` /
+HANDOFF; account/Project memory is advisory only and loses when stale or in
+conflict with the applicable live or current-task source.
+
+Human involvement is reserved for genuine product/business choices, real L3
+authorization, login/2FA/CAPTCHA, and secret entry. Codex uses its own engineering
+judgment for allowed L0/L1/L2 work. Durable Minimum Sufficient Governance lives in
+Project instructions; keep the Boot Prompt short. Default human-readable semantic
+content in PLAN/review/HANDOFF/Human-facing explanations to Simplified Chinese,
+while existing C2C machine tokens, enums, and field names stay in English.
 
 **Golden rules**
 
@@ -213,7 +231,8 @@ ONE ChatGPT conversation per workspace. Same as before.
   1. In the same built-in browser tab, navigate to `https://chatgpt.com/`,
      confirm Chat mode (**Built-in browser capability** §6), then send the boot prompt.
   2. Send a HANDOFF (`docs/protocol.md`) — goal, progress, state, issues,
-     next step. Never paste files.
+     next step, and for an Issue-backed task only the refreshed material
+     `TASK_CONTEXT` from the Codex-read Issue. Never paste files or the Issue.
   3. workspace_info check; only then `c2c session set --url`. On failure,
      leave the old saved URL unchanged.
 - Saved chat 404s: treat as a switch. Reconstruct HANDOFF from
@@ -243,7 +262,9 @@ One ChatGPT Project per workspace. Mapping:
   with the **exact** `connectorName`. After the reply names this workspace,
   `c2c session set -w <ws> --mode project --project-url <collection> --url <chat> --connector-name "<connectorName>" --title "C2C <workspace name>"`.
   If this Codex thread is continuing a previous C2C task, send HANDOFF right
-  after the boot prompt.
+  after the boot prompt. For an Issue-backed task, Codex reads the current
+  Issue and refreshes only its material compact `TASK_CONTEXT`; ChatGPT does
+  not fetch the Issue.
 - Else: read [project-setup.md](references/project-setup.md), then Bind Project.
 
 **Update it**: same `c2c session set --task / --iteration / --state` as long-chat.
@@ -265,6 +286,13 @@ Local checkpoint states (session only, never a ChatGPT `STATE:` line):
 Do not invent `STATE: RESUME`. If the original chat is gone, send HANDOFF.
 All control messages start with `[C2C]`. Keep Codex→ChatGPT messages under 1 KB.
 ChatGPT's replies are expected to be substantive (see step 3). Docs: `docs/protocol.md`.
+
+Before INIT for an Issue-backed task, Codex must read the current Issue itself
+and freeze it as the complete execution contract. Distill only the goal,
+must-preserve constraints, key success criteria, and material durable decisions
+into optional `TASK_CONTEXT`; never paste the full Issue and never instruct
+ChatGPT to read GitHub. Refresh that compact context in a later HANDOFF when the
+Issue contract has materially changed.
 
 **Decision-only precedence:** before generic `STATE: PLAN` handling, check for
 a `HUMAN_GATE_DECISION` block. When Session is `waitingFor=USER`, the current
@@ -337,11 +365,14 @@ TASK_ID: c2c_f81a
 ITERATION: 0
 
 GOAL:
-<user's goal, one paragraph>
+<用简体中文概括用户目标，一段即可>
+
+TASK_CONTEXT:
+<可选；Issue-backed 时由 Codex 提炼必要语义，使整条控制消息目标小于 1 KB>
 
 INSTRUCTION:
-Inspect the connected workspace through the Codex with ChatGPT MCP connector.
-Produce a C2C PLAN message.
+请通过当前绑定的 Codex with ChatGPT connector/MCP 检查 live workspace，
+并输出一份有限、具体、可执行的 C2C PLAN。
 ```
 
    Then:
@@ -352,10 +383,10 @@ Produce a C2C PLAN message.
    A PLAN may include one `HUMAN_GATE` block with `BEFORE_ACTION`, but only for
    the exact L3 consequential action. That marker does not block earlier
    actions and does not change the protocol state.
-   A good PLAN also carries RATIONALE and concrete natural-language edit
+   A good PLAN also carries RATIONALE and concrete Simplified-Chinese edit
    suggestions (which file, what to change, why). If the reply is a bare
    one-liner with no rationale or file-level guidance, ask once:
-   "Please expand the plan with rationale and concrete per-file suggestions."
+   "请补充方案依据，以及逐文件说明改什么、为什么改。"
    Then:
    `c2c session set -w <ws> --protocol-state PLAN_RECEIVED --waiting-for none --next-step "execute PLAN"`
 4. Execute the plan yourself with your own harness (your tools, your judgment;
@@ -386,7 +417,8 @@ Produce a C2C PLAN message.
       the returned machine gate ID and fingerprint to the same ChatGPT chat.
       ChatGPT must not show those IDs or internal state names in its Human
       prompt. It shows the action, environment, targets, allowed/forbidden
-      writes and rollback, then asks once whether to authorize.
+      writes and rollback in Simplified Chinese, then asks once:
+      `是否授权执行这一步？`
    4. Grant only after all workflow provenance conditions hold: the local Gate
       is WAITING; Session is waiting for USER; that exact Gate was shown in the
       same chat; the Human subsequently gave explicit consent; and ChatGPT
@@ -434,17 +466,17 @@ TASK_ID: c2c_f81a
 ITERATION: 1
 
 RESULT:
-Execution finished.
+本轮执行已完成。
 
 CHANGED_FILES:
 4
 
 TESTS:
-27 passed
+27 项通过
 
-Please independently inspect the workspace and current git diff through MCP.
-If execution_output lists a readable item for this iteration, list then read it.
-If status is restricted, ignore it and review from git_diff.
+请通过 MCP 独立检查 live workspace 与当前 git diff。
+如果 execution_output 列出本 iteration 的 readable 项，请先 list 再 read；
+如果状态为 restricted，请忽略正文并改从 git_diff 审查。
 ```
 
    Then:
@@ -455,6 +487,6 @@ If status is restricted, ignore it and review from git_diff.
    the user: "已完成 12 轮协作，仍有未解决问题，是否继续？"
 9. On DONE: summarize the result to the user in plain language.
    `c2c session set -w <ws> --state DONE --clear-checkpoint`
-10. On BLOCKED: read ChatGPT's reason, fix what you can, or surface the single
-    decision the user must make.
+10. On BLOCKED: read ChatGPT's reason, fix what you can, or surface in Simplified
+    Chinese the single decision the user must make.
     `c2c session set -w <ws> --protocol-state BLOCKED --waiting-for USER --known-issues "<short reason>"`
