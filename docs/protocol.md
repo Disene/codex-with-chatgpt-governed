@@ -165,6 +165,13 @@ authorize. While waiting, the local checkpoint keeps its current
 `waitingFor=none`; CANCEL maps the Governance Gate to `INVALIDATED` and does not
 make the task `BLOCKED`.
 
+An ordinary request never retries a terminal Gate. For the same material
+envelope, CONSUMED or INVALIDATED causes `gate request` to fail closed and
+preserves the terminal Gate. Only after ChatGPT/Human explicitly choose a new
+attempt may Codex pass the single `--retry` option; that creates a new WAITING
+Gate and requires new Human authorization. A different material envelope is a
+different consequential action and does not require `--retry`.
+
 Before the exact consequential side effect, Codex performs the final read-only
 material consistency check, then invokes Gate consume. Safe mode rejects
 consume even for a GRANTED Gate. The side effect may start only after the Gate

@@ -904,16 +904,16 @@ gate
   .command("request")
   .description("Create or reuse the Human Gate for an exact L3 execution envelope")
   .requiredOption("--envelope-file <path>")
-  .option("--retry-consumed", "explicitly retry after establishing the outcome of a consumed authorization", false)
+  .option("--retry", "explicitly retry the same action after a terminal Gate", false)
   .option("-w, --workspace <path>")
   .option("--json", "machine-readable output", false)
-  .action((opts: { envelopeFile: string; retryConsumed: boolean; workspace?: string; json: boolean }) => {
+  .action((opts: { envelopeFile: string; retry: boolean; workspace?: string; json: boolean }) => {
     try {
       const workspace = new Workspace(resolveWorkspace(opts.workspace));
       const result = requestGovernanceGate({
         workspaceId: workspace.id,
         input: readEnvelopeInput(opts.envelopeFile),
-        retryConsumed: opts.retryConsumed,
+        retry: opts.retry,
       });
       if (opts.json) say(JSON.stringify(gateResultPayload(result)));
       else check(result.reused ? `Human Gate 已复用（${result.gate.status}）` : "Human Gate 已准备，等待用户决定");

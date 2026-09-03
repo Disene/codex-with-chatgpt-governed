@@ -144,7 +144,22 @@ describe("Governance Integration V1", () => {
         reason: "human cancelled consequential action",
       });
 
-      const nextWaiting = requestGovernanceGate({ workspaceId, input: envelopeInput() });
+      expect(() => requestGovernanceGate({ workspaceId, input: envelopeInput() })).toThrow(
+        /invalidated authorization cannot be replayed/
+      );
+      expect(readGateLifecycleStatus(workspaceId).gate).toMatchObject({
+        id: waiting.gate.id,
+        status: "INVALIDATED",
+      });
+
+      const nextWaiting = requestGovernanceGate({
+        workspaceId,
+        input: envelopeInput(),
+        retry: true,
+        now: "2026-09-03T01:05:00.000Z",
+      });
+      expect(nextWaiting).toMatchObject({ created: true, reused: false });
+      expect(nextWaiting.gate.id).not.toBe(waiting.gate.id);
       const cancelledWaiting = decideGovernanceGate({
         workspaceId,
         decision: "cancel",
@@ -220,7 +235,7 @@ describe("Governance Integration V1", () => {
       const explicitRetry = requestGovernanceGate({
         workspaceId,
         input,
-        retryConsumed: true,
+        retry: true,
         now: "2026-09-03T02:01:00.000Z",
       });
       expect(explicitRetry).toMatchObject({ created: true, reused: false });

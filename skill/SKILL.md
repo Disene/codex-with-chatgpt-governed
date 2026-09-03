@@ -535,10 +535,12 @@ change the current `protocolState`. Process only GRANT/CANCEL, then change only
      `protocolState` with `waitingFor=none`, return to the marked L3 boundary,
      and continue with the final check and consume. CONSUMED is fail-closed:
      do not replay the effect or automatically request another Gate; establish
-     the real outcome first, and request again with `--retry-consumed` only for
+     the real outcome first, and request again with `--retry` only for
      an explicit retry.
      INVALIDATED means skip that consequential action and clear only
-     `waitingFor`; it does not make the task BLOCKED.
+     `waitingFor`; it does not make the task BLOCKED or permit an automatic
+     repeat. The same action may be requested again only with `--retry` after
+     ChatGPT/Human explicitly choose a new attempt.
    - `EXECUTED_SENT` + `waitingFor=GPT_REVIEW`: do not INIT, do not re-run,
      do not resend EXECUTED. Stay on the saved chat and wait for review. If
      that chat 404s: HANDOFF from checkpoint fields (no logs), then wait.
@@ -599,13 +601,13 @@ Produce a C2C PLAN message.
       `c2c governance gate request -w <ws> --envelope-file <file> --json`.
       The CLI creates or reuses the exact envelope and Gate. Same WAITING or
       GRANTED authorization is reused; do not ask the Human twice. Ordinary
-      boundary handling never adds `--retry-consumed`. If the same-material
-      authorization is already CONSUMED, the request must fail closed: do not
-      execute the effect or create a Gate until the prior effect's actual result
-      is established. Only after that result is known and ChatGPT/Human have
-      explicitly chosen a new retry attempt may Codex run the same request with
-      `--retry-consumed`. That creates a new WAITING Gate and requires a new
-      Human authorization; retry is never automatic.
+      boundary handling never adds `--retry`. If the same-material Gate is
+      terminal (CONSUMED or INVALIDATED), the request must fail closed and must
+      not execute the effect or create a Gate. For CONSUMED, establish the prior
+      effect's actual result first; for INVALIDATED, preserve the Human's cancel
+      decision. Only after ChatGPT/Human explicitly choose a new attempt may
+      Codex run the same request with `--retry`. That creates a new WAITING Gate
+      and requires a new Human authorization; retry is never automatic.
    3. If the Gate is WAITING, keep the current checkpoint state (normally
       `EXECUTING`) and set only `waitingFor=USER`. Send `HUMAN_GATE_READY` with
       the returned machine gate ID and fingerprint to the same ChatGPT chat.

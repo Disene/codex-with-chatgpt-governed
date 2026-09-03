@@ -92,7 +92,7 @@ export function readGateLifecycleStatus(workspaceId: string): GateLifecycleStatu
 export function requestGovernanceGate(params: {
   workspaceId: string;
   input: ExecutionEnvelopeInput;
-  retryConsumed?: boolean;
+  retry?: boolean;
   now?: string;
 }): GateLifecycleResult {
   const now = params.now ?? new Date().toISOString();
@@ -122,9 +122,13 @@ export function requestGovernanceGate(params: {
         reused: true,
       };
     }
-    if (sameMaterial && gate.status === "CONSUMED" && !params.retryConsumed) {
+    if (
+      sameMaterial &&
+      (gate.status === "CONSUMED" || gate.status === "INVALIDATED") &&
+      !params.retry
+    ) {
       throw new Error(
-        "consumed authorization cannot be replayed; establish the actual outcome before an explicit retry"
+        `${gate.status.toLowerCase()} authorization cannot be replayed; establish the actual outcome before an explicit retry`
       );
     }
   }
