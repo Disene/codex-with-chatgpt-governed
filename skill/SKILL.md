@@ -493,6 +493,14 @@ Do not invent `STATE: RESUME`. If the original chat is gone, send HANDOFF.
 All control messages start with `[C2C]`. Keep Codex→ChatGPT messages under 1 KB.
 ChatGPT's replies are expected to be substantive (see step 3). Docs: `docs/protocol.md`.
 
+**Decision-only precedence:** before generic `STATE: PLAN` handling, check for
+a `HUMAN_GATE_DECISION` block. When Session is `waitingFor=USER`, the current
+Gate is WAITING or GRANTED, and the block matches its exact gate ID and
+fingerprint, this message is only a continuation of the current execution. Do
+not increment iteration, set `PLAN_RECEIVED`, execute or re-execute ACTIONS, or
+change the current `protocolState`. Process only GRANT/CANCEL, then change only
+`waitingFor` from `USER` to `none`.
+
 0. `c2c tunnel status -w <workspace> --json`. If `needsChoice`, follow
    **Connection choice** first (existing installs: ask once, then remember).
    Then `c2c doctor -w <workspace> --json` (auto-repairs). **Doctor gate:** if local
@@ -527,7 +535,8 @@ ChatGPT's replies are expected to be substantive (see step 3). Docs: `docs/proto
      `protocolState` with `waitingFor=none`, return to the marked L3 boundary,
      and continue with the final check and consume. CONSUMED is fail-closed:
      do not replay the effect or automatically request another Gate; establish
-     the real outcome first, and request again only for an explicit retry.
+     the real outcome first, and request again with `--retry-consumed` only for
+     an explicit retry.
      INVALIDATED means skip that consequential action and clear only
      `waitingFor`; it does not make the task BLOCKED.
    - `EXECUTED_SENT` + `waitingFor=GPT_REVIEW`: do not INIT, do not re-run,
@@ -589,7 +598,14 @@ Produce a C2C PLAN message.
    2. Run
       `c2c governance gate request -w <ws> --envelope-file <file> --json`.
       The CLI creates or reuses the exact envelope and Gate. Same WAITING or
-      GRANTED authorization is reused; do not ask the Human twice.
+      GRANTED authorization is reused; do not ask the Human twice. Ordinary
+      boundary handling never adds `--retry-consumed`. If the same-material
+      authorization is already CONSUMED, the request must fail closed: do not
+      execute the effect or create a Gate until the prior effect's actual result
+      is established. Only after that result is known and ChatGPT/Human have
+      explicitly chosen a new retry attempt may Codex run the same request with
+      `--retry-consumed`. That creates a new WAITING Gate and requires a new
+      Human authorization; retry is never automatic.
    3. If the Gate is WAITING, keep the current checkpoint state (normally
       `EXECUTING`) and set only `waitingFor=USER`. Send `HUMAN_GATE_READY` with
       the returned machine gate ID and fingerprint to the same ChatGPT chat.
@@ -599,16 +615,18 @@ Produce a C2C PLAN message.
    4. Grant only after all workflow provenance conditions hold: the local Gate
       is WAITING; Session is waiting for USER; that exact Gate was shown in the
       same chat; the Human subsequently gave explicit consent; and ChatGPT
-      returned `HUMAN_GATE_DECISION: GRANT` with the exact current gate ID and
-      fingerprint. A model recommendation never qualifies. Feishu never
-      qualifies. Run
+      returned a `HUMAN_GATE_DECISION` block with `DECISION: GRANT` and the
+      exact current gate ID and fingerprint. This decision-only continuation
+      takes precedence over generic PLAN handling. A model recommendation
+      never qualifies. Feishu never qualifies. Run
       `c2c governance gate decide -w <ws> --decision grant --gate-id <id> --fingerprint <fingerprint> --json`,
       then set the same checkpoint state with `waitingFor=none`.
-   5. For `HUMAN_GATE_DECISION: CANCEL`, verify the same identifiers, run
+   5. For a `HUMAN_GATE_DECISION` block with `DECISION: CANCEL`, verify the
+      same identifiers, run
       `c2c governance gate decide -w <ws> --decision cancel --gate-id <id> --fingerprint <fingerprint> --json`,
-      and set the same checkpoint state with `waitingFor=none`. Do not execute that action and
-      do not force the task to BLOCKED; continue safe work or wait for the next
-      PLAN/DONE/BLOCKED response.
+      and set the same checkpoint state with `waitingFor=none`. Do not execute
+      that action and do not force the task to BLOCKED; continue safe work or
+      wait for the next PLAN/DONE/BLOCKED response.
    6. For GRANTED, perform only the final read-only consistency and target
       checks, then run
       `c2c governance gate consume -w <ws> --gate-id <id> --envelope-file <file> --json`.

@@ -92,6 +92,7 @@ export function readGateLifecycleStatus(workspaceId: string): GateLifecycleStatu
 export function requestGovernanceGate(params: {
   workspaceId: string;
   input: ExecutionEnvelopeInput;
+  retryConsumed?: boolean;
   now?: string;
 }): GateLifecycleResult {
   const now = params.now ?? new Date().toISOString();
@@ -104,8 +105,12 @@ export function requestGovernanceGate(params: {
     const storedEnvelopeMatchesGate =
       current.envelope.id === gate.envelopeId &&
       current.envelope.fingerprint === gate.envelopeFingerprint;
-    if (
+    const sameMaterial =
       storedEnvelopeMatchesGate &&
+      current.envelope.id === envelope.id &&
+      current.envelope.fingerprint === envelope.fingerprint;
+    if (
+      sameMaterial &&
       reconciled === gate &&
       (gate.status === "WAITING" || gate.status === "GRANTED")
     ) {
@@ -116,6 +121,11 @@ export function requestGovernanceGate(params: {
         created: false,
         reused: true,
       };
+    }
+    if (sameMaterial && gate.status === "CONSUMED" && !params.retryConsumed) {
+      throw new Error(
+        "consumed authorization cannot be replayed; establish the actual outcome before an explicit retry"
+      );
     }
   }
 

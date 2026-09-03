@@ -194,7 +194,7 @@ describe("Governance Integration V1", () => {
       isolate("gate-restart");
       const workspaceId = "workspace-restart";
       const input = envelopeInput();
-      const waiting = requestGovernanceGate({ workspaceId, input });
+      const waiting = requestGovernanceGate({ workspaceId, input, now: "2026-09-03T02:00:00.000Z" });
 
       expect(readGateLifecycleStatus(workspaceId).gate).toMatchObject({ id: waiting.gate.id, status: "WAITING" });
       expect(requestGovernanceGate({ workspaceId, input })).toMatchObject({ created: false, reused: true });
@@ -214,9 +214,33 @@ describe("Governance Integration V1", () => {
       expect(firstRead.gate).toMatchObject({ id: waiting.gate.id, status: "CONSUMED" });
       expect(secondRead.gate).toEqual(firstRead.gate);
 
-      const explicitRetry = requestGovernanceGate({ workspaceId, input });
+      expect(() => requestGovernanceGate({ workspaceId, input })).toThrow(/consumed authorization cannot be replayed/);
+      expect(readGateLifecycleStatus(workspaceId).gate).toMatchObject({ id: waiting.gate.id, status: "CONSUMED" });
+
+      const explicitRetry = requestGovernanceGate({
+        workspaceId,
+        input,
+        retryConsumed: true,
+        now: "2026-09-03T02:01:00.000Z",
+      });
       expect(explicitRetry).toMatchObject({ created: true, reused: false });
       expect(explicitRetry.gate.id).not.toBe(waiting.gate.id);
+
+      decideGovernanceGate({
+        workspaceId,
+        decision: "grant",
+        gateId: explicitRetry.gate.id,
+        fingerprint: explicitRetry.gate.envelopeFingerprint,
+      });
+      consumeGovernanceGate({ workspaceId, gateId: explicitRetry.gate.id, input });
+      const differentAction = requestGovernanceGate({
+        workspaceId,
+        input: envelopeInput("promote serving v3"),
+        now: "2026-09-03T02:02:00.000Z",
+      });
+      expect(differentAction).toMatchObject({ created: true, reused: false });
+      expect(differentAction.gate).toMatchObject({ status: "WAITING" });
+      expect(differentAction.gate.id).not.toBe(explicitRetry.gate.id);
     });
   });
 

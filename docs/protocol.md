@@ -150,6 +150,14 @@ HUMAN_GATE_DECISION:
   ENVELOPE_FINGERPRINT: ...
 ```
 
+This is a decision-only continuation message even though it keeps the existing
+`STATE: PLAN`. When Session is waiting for `USER`, the current Gate is WAITING
+or GRANTED, and the block matches that Gate, `HUMAN_GATE_DECISION` takes
+precedence over generic PLAN handling. Codex processes only GRANT or CANCEL: it
+does not increment the iteration, write `PLAN_RECEIVED`, execute ACTIONS, or
+change the current `protocolState`. After the decision it changes only
+`waitingFor` from `USER` to `none`.
+
 `DECISION` may be `GRANT` or `CANCEL`. A model recommendation is never Human
 authorization. Feishu only links back to the ChatGPT conversation and can never
 authorize. While waiting, the local checkpoint keeps its current
@@ -309,10 +317,10 @@ Rules:
 14. After HUMAN_GATE_READY, show the Human the action, environment, targets,
     allowed and forbidden writes, and rollback without machine IDs or internal
     state names. Ask once whether to authorize the step.
-15. Return HUMAN_GATE_DECISION=GRANT only after the Human explicitly agrees in
-    this conversation, or CANCEL after they explicitly cancel. Echo the exact
-    machine gate ID and fingerprint in the control block. Your own recommendation
-    never counts as Human authorization.
+15. Return a HUMAN_GATE_DECISION block with DECISION: GRANT only after the Human
+    explicitly agrees in this conversation, or DECISION: CANCEL after they
+    explicitly cancel. Echo the exact machine gate ID and fingerprint in the
+    control block. Your own recommendation never counts as Human authorization.
 16. If this chat sits in a ChatGPT Project, use only the connector named
     in that Project's instructions. Do not use another workspace's connector.
 ```
