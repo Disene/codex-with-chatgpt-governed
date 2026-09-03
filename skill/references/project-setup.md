@@ -34,7 +34,11 @@ normal control plane, and browser automation must not hunt the sidebar menu.
    分享 or add 来源/files.
    - 记忆: 个人、非共享的普通 ChatGPT Pro 项目默认选择「默认记忆（Default memory）」；
      仅在用户明确要求隔离，或项目为共享/敏感场景时选择「仅限项目记忆」(project-only).
-   - 库访问权限: disabled.
+   - 库访问权限: first observe whether the current host exposes an independent
+     control. If it does, prefer disabled for ordinary C2C unless the Human
+     explicitly needs Library access. If it is host-coupled or read-only,
+     accept and report the effective value; do not switch memory mode only to
+     force Library off, and do not fail setup solely for that limitation.
    - 指令: paste the full template below, filling `{{…}}` from
      `workspace_info` / setup and using the exact `connectorName`.
    Never put a public or temporary address in the instructions. Save and close.
@@ -60,6 +64,8 @@ Codex 负责实现与执行。
 粘贴可由 MCP 读取的文件、diff 或日志。`EXECUTED` 后，有 readable 项时对
 execution_output 先 list 再 read；若 restricted，则改从 git 审查。不得把 repo 上传到
 本 Project 的 files 或 sources。
+Library 可用不构成搜索或使用任意 Library 内容的授权；仅在当前任务明确需要或 Human
+明确请求时使用相关内容，不检索无关文件。
 
 按事实类型确定权威来源：
 - repository/runtime 当前事实：以 connector 读取的 live code、git、diff 与测试为准；
@@ -94,6 +100,10 @@ Minimum Sufficient Governance：
   `ENVELOPE_FINGERPRINT` 只出现在 machine decision block；模型建议与 Feishu 永不授权。
 - 不推测或扩张 scope。success criteria、tests 与 independent review 通过且无 blocker 时，
   倾向 `DONE`；PASS 后不制造 final-final review。
+- 在 Draft PR creation 与 terminal `DONE`/merge 的自然 phase boundary，各执行一次
+  `docs/operating-model.md` 定义的 materiality check；仅 material durable contract 变化才在
+  same task/change set 更新 canonical source，NO 则不制造文档 churn。它不是新 state、Gate、
+  preflight、evidence layer 或 review phase。
 
 PLAN、review、HANDOFF、BLOCKED reason 与 Human-facing 解释的语义内容默认使用简体中文。
 `[C2C]`、`STATE`、`INIT`、`PLAN`、`EXECUTED`、`DONE`、`BLOCKED`、`HANDOFF`、
@@ -121,11 +131,14 @@ Project sources, click 分享, or edit another workspace's connector.
   that field using the full template above. Never paste `mcpUrl` or another
   public/temporary address into Project instructions.
 - **Memory/settings drift:** for a personal, non-shared ordinary Project,
-  restore Default memory and disabled library access. Preserve project-only
-  memory only when the user explicitly requested isolation or the Project is
-  shared/sensitive. Memory remains advisory and never overrides the applicable
-  live connector or current `TASK_CONTEXT` / HANDOFF. Preserve the verified
-  collection binding and exact connector name.
+  restore Default memory. Preserve project-only memory only when the user
+  explicitly requested isolation or the Project is shared/sensitive. Observe
+  whether Library has an independent control: prefer disabled when configurable
+  unless the Human explicitly needs it; when host-coupled/read-only, accept and
+  report the effective value without changing memory mode or failing repair
+  solely to force Library off. Memory remains advisory and never overrides the
+  applicable live connector or current `TASK_CONTEXT` / HANDOFF. Preserve the
+  verified collection binding and exact connector name.
 
 After any repair, call `workspace_info` through the named connector and require
 the expected workspace name before planning, saving a new chat URL, or sending

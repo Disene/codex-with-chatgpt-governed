@@ -23,6 +23,7 @@ describe("Collaboration Contract & Chinese UX V1", () => {
   const protocol = read("docs/protocol.md");
   const coreSkill = read("skill/SKILL.md");
   const projectSetup = read("skill/references/project-setup.md");
+  const operatingModel = read("docs/operating-model.md");
   const bootPrompt = fencedBlockAfter(protocol, "## Boot Prompt");
   const protocolProjectInstructions = fencedBlockAfter(protocol, "## Project instructions");
   const setupProjectInstructions = fencedBlockAfter(projectSetup, "## Project instructions");
@@ -121,6 +122,42 @@ describe("Collaboration Contract & Chinese UX V1", () => {
     expect(protocolProjectInstructions).toMatch(
       /陈旧或冲突时[\s\S]*live source 或当前任务上下文/
     );
+    expect(operatingModel).toMatch(/Memory is not a synchronization target/);
+    expect(operatingModel).toMatch(/advisory context only/);
+  });
+
+  it("routes durable facts, privacy, sessions, and upstream integration explicitly", () => {
+    expect(operatingModel).toMatch(/## Authority map/);
+    expect(operatingModel).toMatch(/Repository and runtime facts[\s\S]*live repository/);
+    expect(operatingModel).toMatch(/Current task intent[\s\S]*active Issue/);
+    expect(operatingModel).toMatch(/Stable cross-task operating rules[\s\S]*this document/);
+    expect(operatingModel).toMatch(/## Privacy and Issue routing/);
+    expect(operatingModel).toMatch(/public C2C repository[\s\S]*public-safe C2C work/);
+    expect(operatingModel).toMatch(/Session rotation is hybrid/);
+    expect(operatingModel).toMatch(/temporary[\s\S]*compatibility or sync branch/);
+    expect(operatingModel).toMatch(/Upstream drift alone is not an instruction/);
+  });
+
+  it("defines one phase-boundary Durable Sync check without a new governance phase", () => {
+    const materialityQuestion =
+      "Did this task materially create or change a durable rule, external-product";
+    expect(operatingModel.match(new RegExp(materialityQuestion, "g"))).toHaveLength(1);
+    expect(operatingModel).toMatch(/same task\/change set/);
+    expect(operatingModel).toMatch(/If \*\*NO\*\*, do nothing/);
+    expect(operatingModel).toMatch(
+      /not a protocol state, Human Gate, preflight,[\s\S]*repeated Governance phase/
+    );
+    expect(coreSkill).toMatch(/Durable Sync Rule[\s\S]*same[\s\S]*task\/change set/);
+    expect(protocol).toMatch(/Durable Sync Rule[\s\S]*adds no protocol state/);
+  });
+
+  it("handles Library access as a capability without widening retrieval authority", () => {
+    expect(projectSetup).not.toContain("- 库访问权限: disabled.");
+    expect(projectSetup).toMatch(/independent[\s\S]*control[\s\S]*prefer disabled/);
+    expect(projectSetup).toMatch(/host-coupled or read-only[\s\S]*accept and report/);
+    expect(projectSetup).toMatch(/do not switch memory mode only to[\s\S]*force Library off/);
+    expect(protocolProjectInstructions).toMatch(/Library 可用不构成[\s\S]*授权/);
+    expect(protocolProjectInstructions).toMatch(/不检索无关文件/);
   });
 
   it("relays Issue-backed tasks through compact TASK_CONTEXT without direct ChatGPT Issue reads", () => {

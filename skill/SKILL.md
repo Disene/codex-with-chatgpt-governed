@@ -96,6 +96,13 @@ while existing C2C machine tokens, enums, and field names stay in English.
      `chatgptRepair`. Wait and run doctor again.
    A ChatGPT-side 401 after a sent message is different: repair then, do not
    treat it as permission to skip this gate next time.
+10. **Durable Sync Rule.** At a natural phase boundary (normally Draft PR
+   creation and again before terminal `DONE`/merge), ask exactly one materiality
+   question from `docs/operating-model.md`. If the task materially changed a
+   durable rule, external-product assumption, cross-task decision, or live
+   Project-instructions contract, update its canonical source in the same
+   task/change set. Otherwise do nothing. This is a workflow check, not a new
+   protocol state, Human Gate, preflight, evidence layer, or review phase.
 
 ## Built-in browser capability (ChatGPT)
 
