@@ -12,11 +12,20 @@ description: >
 
 ChatGPT thinks. Codex works.
 
-You (Codex) own execution: editing, shell, git, tests, recovery.
-ChatGPT owns high-level reasoning: understanding, planning, review, debug strategy.
+You (Codex) own execution: local investigation, editing, shell, git, tests,
+authorized effects, and recovery. ChatGPT owns architecture/product reasoning,
+planning, real-effect risk judgment, scope discipline, independent review, and
+debug strategy.
 The C2C Bridge gives ChatGPT read-only MCP access to the current workspace, so
 control messages between you and ChatGPT stay tiny (< 1 KB) — ChatGPT pulls
 whatever data it needs by itself.
+
+Human involvement is reserved for genuine product/business choices, real L3
+authorization, login/2FA/CAPTCHA, and secret entry. Codex uses its own engineering
+judgment for allowed L0/L1/L2 work. Durable Minimum Sufficient Governance lives in
+Project instructions; keep the Boot Prompt short. Default human-readable semantic
+content in PLAN/review/HANDOFF/Human-facing explanations to Simplified Chinese,
+while existing C2C machine tokens, enums, and field names stay in English.
 
 **Golden rules**
 
@@ -337,11 +346,11 @@ TASK_ID: c2c_f81a
 ITERATION: 0
 
 GOAL:
-<user's goal, one paragraph>
+<用简体中文概括用户目标，一段即可>
 
 INSTRUCTION:
-Inspect the connected workspace through the Codex with ChatGPT MCP connector.
-Produce a C2C PLAN message.
+请通过当前绑定的 Codex with ChatGPT connector/MCP 检查 live workspace，
+并输出一份有限、具体、可执行的 C2C PLAN。
 ```
 
    Then:
@@ -352,10 +361,10 @@ Produce a C2C PLAN message.
    A PLAN may include one `HUMAN_GATE` block with `BEFORE_ACTION`, but only for
    the exact L3 consequential action. That marker does not block earlier
    actions and does not change the protocol state.
-   A good PLAN also carries RATIONALE and concrete natural-language edit
+   A good PLAN also carries RATIONALE and concrete Simplified-Chinese edit
    suggestions (which file, what to change, why). If the reply is a bare
    one-liner with no rationale or file-level guidance, ask once:
-   "Please expand the plan with rationale and concrete per-file suggestions."
+   "请补充方案依据，以及逐文件说明改什么、为什么改。"
    Then:
    `c2c session set -w <ws> --protocol-state PLAN_RECEIVED --waiting-for none --next-step "execute PLAN"`
 4. Execute the plan yourself with your own harness (your tools, your judgment;
@@ -386,7 +395,8 @@ Produce a C2C PLAN message.
       the returned machine gate ID and fingerprint to the same ChatGPT chat.
       ChatGPT must not show those IDs or internal state names in its Human
       prompt. It shows the action, environment, targets, allowed/forbidden
-      writes and rollback, then asks once whether to authorize.
+      writes and rollback in Simplified Chinese, then asks once:
+      `是否授权执行这一步？`
    4. Grant only after all workflow provenance conditions hold: the local Gate
       is WAITING; Session is waiting for USER; that exact Gate was shown in the
       same chat; the Human subsequently gave explicit consent; and ChatGPT
@@ -434,17 +444,17 @@ TASK_ID: c2c_f81a
 ITERATION: 1
 
 RESULT:
-Execution finished.
+本轮执行已完成。
 
 CHANGED_FILES:
 4
 
 TESTS:
-27 passed
+27 项通过
 
-Please independently inspect the workspace and current git diff through MCP.
-If execution_output lists a readable item for this iteration, list then read it.
-If status is restricted, ignore it and review from git_diff.
+请通过 MCP 独立检查 live workspace 与当前 git diff。
+如果 execution_output 列出本 iteration 的 readable 项，请先 list 再 read；
+如果状态为 restricted，请忽略正文并改从 git_diff 审查。
 ```
 
    Then:
@@ -455,6 +465,6 @@ If status is restricted, ignore it and review from git_diff.
    the user: "已完成 12 轮协作，仍有未解决问题，是否继续？"
 9. On DONE: summarize the result to the user in plain language.
    `c2c session set -w <ws> --state DONE --clear-checkpoint`
-10. On BLOCKED: read ChatGPT's reason, fix what you can, or surface the single
-    decision the user must make.
+10. On BLOCKED: read ChatGPT's reason, fix what you can, or surface in Simplified
+    Chinese the single decision the user must make.
     `c2c session set -w <ws> --protocol-state BLOCKED --waiting-for USER --known-issues "<short reason>"`
