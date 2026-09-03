@@ -268,6 +268,33 @@ describe("Feishu webhook adapter", () => {
 });
 
 describe("notification watcher tick", () => {
+  it("keeps a waiting Gate usable when Feishu is not configured", async () => {
+    const env = envelope();
+    const waiting = requestHumanGate(env);
+    const state: GovernanceState = {
+      ...createGovernanceState("workspace123"),
+      envelope: env,
+      gate: waiting,
+    };
+    const detectPresence = vi.fn();
+    const send = vi.fn(async () => undefined);
+
+    const result = await evaluateGateNotificationOnce({
+      workspaceId: "workspace123",
+      deps: {
+        readState: () => state,
+        readConfig: () => null,
+        detectPresence,
+        send,
+      },
+    });
+
+    expect(result).toEqual({ activeGate: true, sent: false, reason: "feishu-not-configured" });
+    expect(detectPresence).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled();
+    expect(state.gate).toMatchObject({ id: waiting.id, status: "WAITING" });
+  });
+
   it("sends once for a waiting AWAY Gate and persists success", async () => {
     const env = envelope();
     const waiting = requestHumanGate(env, "2026-09-03T00:00:00.000Z");

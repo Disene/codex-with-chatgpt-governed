@@ -16,6 +16,20 @@ This layer is intentionally orthogonal to the upstream C2C protocol. It does not
 
 The workflow gate is fail-closed inside the governed C2C flow, but it is not a universal shell security boundary. Codex still owns edit/shell/git/test execution in the upstream architecture. Consequential production actions should later be paired with Codex sandbox/rules or a governed execution adapter so the technical enforcement matches the workflow decision.
 
+The CLI is the trusted local lifecycle seam. It creates or reuses the one active
+Gate only when Codex reaches the exact L3 effect boundary, records the Human's
+GRANT or CANCEL decision, and consumes the exact GRANTED envelope. Safe mode
+always rejects consume. The Gate must be durably `CONSUMED` before the exact
+consequential side effect starts; consumed authorization is never replayed.
+
+Session state remains UX/resume coordination only. Waiting for the Human keeps
+the current protocol state and changes only `waitingFor` to `USER`. Governance
+remains the authorization source of truth.
+
 ## V1 exclusions
 
-The first implementation intentionally excludes Feishu, presence detection, CLI integration, upstream synchronization automation, direct production adapters, and mobile approval. Those are later phases after the governance core is stable.
+Governance V1 does not provide direct production adapters, universal shell
+interception, authorization history or TTL, cryptographic ChatGPT-user
+provenance, upstream synchronization automation, or mobile approval. Presence
+and optional Feishu notification are advisory only; Feishu is never an
+authorization surface and its configuration is not required for Gate use.
