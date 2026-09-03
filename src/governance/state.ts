@@ -2,6 +2,8 @@ import path from "node:path";
 import { getStateDir, readJsonIfExists, writeSecureJson } from "../config/paths.js";
 import type { EffectDescriptor } from "./effects.js";
 import type { HumanGate } from "./gate/authorization.js";
+import type { ExecutionEnvelope } from "./gate/envelope.js";
+import type { GateNotificationState } from "./notifications/router.js";
 import type { PresenceMode } from "./presence/resolver.js";
 
 export type GovernanceMode = "normal" | "safe";
@@ -12,7 +14,9 @@ export interface GovernanceState {
   mode: GovernanceMode;
   presenceMode?: PresenceMode;
   currentEffect?: EffectDescriptor;
+  envelope?: ExecutionEnvelope;
   gate?: HumanGate;
+  notification?: GateNotificationState;
   updatedAt: string;
 }
 
