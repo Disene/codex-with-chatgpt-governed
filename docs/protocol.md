@@ -86,6 +86,17 @@ ACTIONS:
 2. ...
 3. ...
 
+HUMAN_GATE:
+  BEFORE_ACTION: 3
+  EFFECT: L3
+  ACTION: ...
+  ENVIRONMENT: ...
+  TARGETS: ...
+  ALLOWED_WRITES: ...
+  FORBIDDEN_WRITES: ...
+  BASE_REF: ...
+  ROLLBACK: ...
+
 FILES_LIKELY_INVOLVED:
 ...
 
@@ -97,6 +108,60 @@ SUCCESS_CRITERIA:
 ```
 
 Plans must be finite, concrete, executable. Not 40-step epics.
+
+`HUMAN_GATE` is optional and is only valid for a real L3 consequential action.
+`BEFORE_ACTION` marks the first action that may not start without authorization.
+Codex completes the earlier L0/L1/L2 work, tests, build, and read-only readiness
+checks first. The existence of this block is not `STATE: BLOCKED` and does not
+change the local protocol state.
+
+### Human Gate at the L3 effect boundary
+
+At `BEFORE_ACTION`, Codex creates or reuses the local Gate and sends machine
+control information to the same ChatGPT conversation:
+
+```
+[C2C]
+STATE: EXECUTING
+TASK_ID: c2c_f81a
+ITERATION: 1
+
+HUMAN_GATE_READY:
+  GATE_ID: gate_...
+  ENVELOPE_FINGERPRINT: ...
+```
+
+ChatGPT does not repeat those identifiers in the Human-facing prompt. It shows
+only what will run, the environment and targets, allowed and forbidden writes,
+and rollback, then asks once: `是否授权执行这一步？`
+
+Only after the Human explicitly answers in that same conversation may ChatGPT
+return the machine decision:
+
+```
+[C2C]
+STATE: PLAN
+TASK_ID: c2c_f81a
+ITERATION: 1
+
+HUMAN_GATE_DECISION:
+  DECISION: GRANT
+  GATE_ID: gate_...
+  ENVELOPE_FINGERPRINT: ...
+```
+
+`DECISION` may be `GRANT` or `CANCEL`. A model recommendation is never Human
+authorization. Feishu only links back to the ChatGPT conversation and can never
+authorize. While waiting, the local checkpoint keeps its current
+`protocolState` and sets only `waitingFor=USER`. GRANT or CANCEL restores
+`waitingFor=none`; CANCEL maps the Governance Gate to `INVALIDATED` and does not
+make the task `BLOCKED`.
+
+Before the exact consequential side effect, Codex performs the final read-only
+material consistency check, then invokes Gate consume. Safe mode rejects
+consume even for a GRANTED Gate. The side effect may start only after the Gate
+has been durably persisted as `CONSUMED`, and must follow immediately rather
+than after another long test or preflight phase.
 
 ### EXECUTED (Codex → ChatGPT)
 
@@ -238,7 +303,17 @@ Rules:
 12. If you receive a HANDOFF message, this conversation continues an
     existing task. Trust the handoff brief for history, re-read any code
     you need through MCP, and resume from NEXT_EXPECTED_STEP.
-13. If this chat sits in a ChatGPT Project, use only the connector named
+13. Classify the next real effect. For an L3 consequential action, add one
+    HUMAN_GATE block with BEFORE_ACTION. Do not use STATE: BLOCKED merely
+    because the plan contains a Human Gate.
+14. After HUMAN_GATE_READY, show the Human the action, environment, targets,
+    allowed and forbidden writes, and rollback without machine IDs or internal
+    state names. Ask once whether to authorize the step.
+15. Return HUMAN_GATE_DECISION=GRANT only after the Human explicitly agrees in
+    this conversation, or CANCEL after they explicitly cancel. Echo the exact
+    machine gate ID and fingerprint in the control block. Your own recommendation
+    never counts as Human authorization.
+16. If this chat sits in a ChatGPT Project, use only the connector named
     in that Project's instructions. Do not use another workspace's connector.
 ```
 

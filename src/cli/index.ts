@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { startBridge } from "../bridge/server.js";
+import { startServeLifecycle } from "./serve-lifecycle.js";
 import { findBridgeObservation, findLiveBridge, type RuntimeState } from "../bridge/runtime.js";
 import { adminFetch, ensureBridge, stopBridge } from "../process/daemon.js";
 import { Workspace } from "../workspace/manager.js";
@@ -56,6 +56,16 @@ import {
 } from "../session/state.js";
 import { appendExecutionRecord } from "../execution/records.js";
 import { saveExecutionOutput } from "../execution/output.js";
+import {
+  consumeGovernanceGate,
+  decideGovernanceGate,
+  parseExecutionEnvelopeInput,
+  readGateLifecycleStatus,
+  requestGovernanceGate,
+  type GateLifecycleResult,
+  type HumanGateDecision,
+} from "../governance/gate/lifecycle.js";
+import type { ExecutionEnvelopeInput } from "../governance/gate/envelope.js";
 
 const program = new Command();
 
@@ -67,6 +77,28 @@ const cross = (msg: string): void => say(`✗ ${msg}`);
 
 function resolveWorkspace(option?: string): string {
   return path.resolve(option ?? process.cwd());
+}
+
+function readEnvelopeInput(file: string): ExecutionEnvelopeInput {
+  const absolute = path.resolve(file);
+  let value: unknown;
+  try {
+    value = JSON.parse(fs.readFileSync(absolute, "utf8"));
+  } catch (error) {
+    throw new Error(`could not read envelope file: ${(error as Error).message}`);
+  }
+  return parseExecutionEnvelopeInput(value);
+}
+
+function gateResultPayload(result: GateLifecycleResult): Record<string, unknown> {
+  return {
+    ok: true,
+    created: result.created,
+    reused: result.reused,
+    mode: result.state.mode,
+    envelope: result.envelope,
+    gate: result.gate,
+  };
 }
 
 /** Local harness output only. Never pasted into ChatGPT. */
@@ -198,17 +230,17 @@ program
   .option("--port <port>", "preferred port")
   .action(async (opts: { workspace: string; port?: string }) => {
     const logger = new Logger({ name: "bridge", console: true });
-    const bridge = await startBridge({
+    const lifecycle = await startServeLifecycle({
       workspaceRoot: resolveWorkspace(opts.workspace),
       port: opts.port ? parseInt(opts.port, 10) : undefined,
       logger,
     });
     const shutdown = (): void => {
-      void bridge.close().then(() => process.exit(0));
+      void lifecycle.shutdown().then(() => process.exit(0));
     };
     process.on("SIGINT", shutdown);
     process.on("SIGTERM", shutdown);
-    say(`bridge ready on ${bridge.localBaseUrl()} (workspace ${bridge.workspace.name})`);
+    say(`bridge ready on ${lifecycle.bridge.localBaseUrl()} (workspace ${lifecycle.bridge.workspace.name})`);
   });
 
 // ---------------------------------------------------------------- start
@@ -835,6 +867,115 @@ program
     fs.mkdirSync(getStateDir(), { recursive: true });
     fs.writeFileSync(file, JSON.stringify({ date: today, updateAvailable, remoteCommit }), { mode: 0o600 });
     emit({ checked: true, updateAvailable, localCommit: local.stdout, remoteCommit });
+  });
+
+// ---------------------------------------------------------------- governance (trusted local Human Gate lifecycle)
+
+const governance = program
+  .command("governance")
+  .description("Inspect and operate the governed execution lifecycle");
+
+const gate = governance
+  .command("gate")
+  .description("Operate the single active Human Gate for this workspace");
+
+gate
+  .command("status", { isDefault: true })
+  .description("Read the active Human Gate without changing it")
+  .option("-w, --workspace <path>")
+  .option("--json", "machine-readable output", false)
+  .action((opts: { workspace?: string; json: boolean }) => {
+    try {
+      const workspace = new Workspace(resolveWorkspace(opts.workspace));
+      const status = readGateLifecycleStatus(workspace.id);
+      if (opts.json) {
+        say(JSON.stringify({ ok: true, ...status }));
+      } else if (!status.gate) {
+        say("当前没有 Human Gate。");
+      } else {
+        say(`Human Gate：${status.gate.status}`);
+      }
+    } catch (error) {
+      handleCliError(error, opts.json);
+    }
+  });
+
+gate
+  .command("request")
+  .description("Create or reuse the Human Gate for an exact L3 execution envelope")
+  .requiredOption("--envelope-file <path>")
+  .option("-w, --workspace <path>")
+  .option("--json", "machine-readable output", false)
+  .action((opts: { envelopeFile: string; workspace?: string; json: boolean }) => {
+    try {
+      const workspace = new Workspace(resolveWorkspace(opts.workspace));
+      const result = requestGovernanceGate({
+        workspaceId: workspace.id,
+        input: readEnvelopeInput(opts.envelopeFile),
+      });
+      if (opts.json) say(JSON.stringify(gateResultPayload(result)));
+      else check(result.reused ? `Human Gate 已复用（${result.gate.status}）` : "Human Gate 已准备，等待用户决定");
+    } catch (error) {
+      handleCliError(error, opts.json);
+    }
+  });
+
+gate
+  .command("decide")
+  .description("Apply the Human decision to the exact active Gate")
+  .requiredOption("--decision <decision>", "grant or cancel")
+  .requiredOption("--gate-id <id>")
+  .requiredOption("--fingerprint <fingerprint>")
+  .option("-w, --workspace <path>")
+  .option("--json", "machine-readable output", false)
+  .action(
+    (opts: {
+      decision: string;
+      gateId: string;
+      fingerprint: string;
+      workspace?: string;
+      json: boolean;
+    }) => {
+      try {
+        const decision = opts.decision.trim().toLowerCase();
+        if (decision !== "grant" && decision !== "cancel") {
+          throw new Error("decision must be grant or cancel");
+        }
+        const workspace = new Workspace(resolveWorkspace(opts.workspace));
+        const result = decideGovernanceGate({
+          workspaceId: workspace.id,
+          decision: decision as HumanGateDecision,
+          gateId: opts.gateId,
+          fingerprint: opts.fingerprint,
+        });
+        if (opts.json) say(JSON.stringify({ ...gateResultPayload(result), decision }));
+        else check(decision === "grant" ? "已记录用户授权" : "已取消该 consequential action");
+      } catch (error) {
+        handleCliError(error, opts.json);
+      }
+    }
+  );
+
+gate
+  .command("consume")
+  .description("Consume the exact granted Gate immediately before its consequential effect")
+  .requiredOption("--gate-id <id>")
+  .requiredOption("--envelope-file <path>")
+  .option("-w, --workspace <path>")
+  .option("--json", "machine-readable output", false)
+  .action((opts: { gateId: string; envelopeFile: string; workspace?: string; json: boolean }) => {
+    try {
+      const workspace = new Workspace(resolveWorkspace(opts.workspace));
+      const result = consumeGovernanceGate({
+        workspaceId: workspace.id,
+        gateId: opts.gateId,
+        input: readEnvelopeInput(opts.envelopeFile),
+      });
+      if (opts.json) say(JSON.stringify(gateResultPayload(result)));
+      else check("Human Gate 已消费，可以立即执行精确的 consequential action");
+    } catch (error) {
+      handleCliError(error, opts.json);
+    }
   });
 
 // ---------------------------------------------------------------- session (ChatGPT conversation / Project memory)

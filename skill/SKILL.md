@@ -520,6 +520,16 @@ ChatGPT's replies are expected to be substantive (see step 3). Docs: `docs/proto
    (legacy session): continue as a normal new/continued loop. A browser/js
    timeout is not a lost task — claim the original tab; do not INIT, re-run,
    or resend EXECUTED just because a wait timed out.
+   - If `waitingFor=USER`, run
+     `c2c governance gate status -w <ws> --json` before interpreting the
+     checkpoint state. WAITING means keep the same `protocolState`, Gate, and
+     chat and continue waiting. GRANTED means do not ask again: set the same
+     `protocolState` with `waitingFor=none`, return to the marked L3 boundary,
+     and continue with the final check and consume. CONSUMED is fail-closed:
+     do not replay the effect or automatically request another Gate; establish
+     the real outcome first, and request again only for an explicit retry.
+     INVALIDATED means skip that consequential action and clear only
+     `waitingFor`; it does not make the task BLOCKED.
    - `EXECUTED_SENT` + `waitingFor=GPT_REVIEW`: do not INIT, do not re-run,
      do not resend EXECUTED. Stay on the saved chat and wait for review. If
      that chat 404s: HANDOFF from checkpoint fields (no logs), then wait.
@@ -555,6 +565,9 @@ Produce a C2C PLAN message.
 3. Wait for ChatGPT's `STATE: PLAN` reply (**In-app browser** §8 — short DOM
    checks, same tab; do not treat a 5-minute browser timeout as failure).
    Read GOAL/ACTIONS/TESTS/SUCCESS_CRITERIA.
+   A PLAN may include one `HUMAN_GATE` block with `BEFORE_ACTION`, but only for
+   the exact L3 consequential action. That marker does not block earlier
+   actions and does not change the protocol state.
    A good PLAN also carries RATIONALE and concrete natural-language edit
    suggestions (which file, what to change, why). If the reply is a bare
    one-liner with no rationale or file-level guidance, ask once:
@@ -565,6 +578,48 @@ Produce a C2C PLAN message.
    ChatGPT does not micro-manage tool calls).
    Before you start:
    `c2c session set -w <ws> --protocol-state EXECUTING --waiting-for none --next-step "finish PLAN then record"`
+
+   If the PLAN has a `HUMAN_GATE`, first complete every allowed action before
+   `BEFORE_ACTION`: local edits, tests/build, reversible preparation, read-only
+   readiness and material consistency checks. Do not request the Gate when the
+   PLAN first arrives. At the marked boundary:
+
+   1. Write only the `ExecutionEnvelopeInput` fields from the block to a local
+      temporary JSON file. Do not construct Governance state JSON.
+   2. Run
+      `c2c governance gate request -w <ws> --envelope-file <file> --json`.
+      The CLI creates or reuses the exact envelope and Gate. Same WAITING or
+      GRANTED authorization is reused; do not ask the Human twice.
+   3. If the Gate is WAITING, keep the current checkpoint state (normally
+      `EXECUTING`) and set only `waitingFor=USER`. Send `HUMAN_GATE_READY` with
+      the returned machine gate ID and fingerprint to the same ChatGPT chat.
+      ChatGPT must not show those IDs or internal state names in its Human
+      prompt. It shows the action, environment, targets, allowed/forbidden
+      writes and rollback, then asks once whether to authorize.
+   4. Grant only after all workflow provenance conditions hold: the local Gate
+      is WAITING; Session is waiting for USER; that exact Gate was shown in the
+      same chat; the Human subsequently gave explicit consent; and ChatGPT
+      returned `HUMAN_GATE_DECISION: GRANT` with the exact current gate ID and
+      fingerprint. A model recommendation never qualifies. Feishu never
+      qualifies. Run
+      `c2c governance gate decide -w <ws> --decision grant --gate-id <id> --fingerprint <fingerprint> --json`,
+      then set the same checkpoint state with `waitingFor=none`.
+   5. For `HUMAN_GATE_DECISION: CANCEL`, verify the same identifiers, run
+      `c2c governance gate decide -w <ws> --decision cancel --gate-id <id> --fingerprint <fingerprint> --json`,
+      and set the same checkpoint state with `waitingFor=none`. Do not execute that action and
+      do not force the task to BLOCKED; continue safe work or wait for the next
+      PLAN/DONE/BLOCKED response.
+   6. For GRANTED, perform only the final read-only consistency and target
+      checks, then run
+      `c2c governance gate consume -w <ws> --gate-id <id> --envelope-file <file> --json`.
+      Safe mode or any identity/material mismatch must stop the action. Only
+      after status is durably CONSUMED may the exact consequential side effect
+      begin, and it must begin immediately rather than after more tests or a
+      new preflight phase.
+
+   Gate CLI commands never update Session. Always preserve the current
+   `protocolState` while changing `waitingFor`. Governance is authoritative:
+   `waitingFor=none` never permits an effect while the Gate is still WAITING.
 5. Record the execution so ChatGPT can read it via MCP. Metadata always:
    `c2c record -w <ws> --task c2c_f81a --iteration 1 --changed-files "src/a.ts,src/b.ts" --tests "27 passed" --exit-status ok`
    If this iteration ran a **test / build / lint / typecheck** command, also
