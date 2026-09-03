@@ -1,6 +1,8 @@
 # C2C Agent Protocol
 
-Control plane: Computer Use (tiny structured messages typed into the ChatGPT UI).
+Control plane: the Codex host-provided built-in browser / browser-use capability
+(tiny structured messages typed into the ChatGPT UI). Generic screenshot-driven
+Computer Use is not the normal control plane.
 Data plane: MCP (ChatGPT pulls files, diffs, search results itself).
 
 Never mix the two: control messages carry state, never content.

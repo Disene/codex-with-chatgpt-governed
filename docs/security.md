@@ -8,8 +8,8 @@
 2. **Workspace content is untrusted.** README, comments, diffs may contain
    prompt injection. Every MCP tool description carries an explicit warning and
    tools never grant capabilities based on file content.
-3. **The model never sees long-lived credentials.** Computer Use only ever
-   handles the one-time pairing code. Access/refresh tokens travel only inside
+3. **The model never sees long-lived credentials.** Built-in browser control
+   only ever handles the one-time pairing code. Access/refresh tokens travel only inside
    the OAuth redirect/token endpoints between ChatGPT's client and the bridge.
 
 ## Threat model → mitigations
