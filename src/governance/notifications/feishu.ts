@@ -8,9 +8,26 @@ export interface FeishuGateMessage {
   chatUrl?: string | null;
 }
 
+export interface FeishuSetupTestMessage {
+  workspaceName: string;
+}
+
 export function createFeishuSignature(secret: string, timestampSeconds: number): string {
   const stringToSign = `${timestampSeconds}\n${secret}`;
   return createHmac("sha256", stringToSign).update("").digest("base64");
+}
+
+function applySignature(
+  config: FeishuNotificationConfig,
+  payload: Record<string, unknown>,
+  timestampSeconds: number
+): Record<string, unknown> {
+  if (!config.secret) return payload;
+  return {
+    ...payload,
+    timestamp: String(timestampSeconds),
+    sign: createFeishuSignature(config.secret, timestampSeconds),
+  };
 }
 
 export function buildFeishuGatePayload(
@@ -29,41 +46,72 @@ export function buildFeishuGatePayload(
     lines.push([{ tag: "a", text: "打开 ChatGPT 查看并授权", href: message.chatUrl }]);
   }
 
-  const payload: Record<string, unknown> = {
-    msg_type: "post",
-    content: {
-      post: {
-        zh_cn: {
-          title: "🔐 Governed C2C 需要人工授权",
-          content: lines,
+  return applySignature(
+    config,
+    {
+      msg_type: "post",
+      content: {
+        post: {
+          zh_cn: {
+            title: "🔐 Governed C2C 需要人工授权",
+            content: lines,
+          },
         },
       },
     },
-  };
-
-  if (config.secret) {
-    payload.timestamp = String(timestampSeconds);
-    payload.sign = createFeishuSignature(config.secret, timestampSeconds);
-  }
-  return payload;
+    timestampSeconds
+  );
 }
 
-export async function sendFeishuGateNotification(params: {
+export function buildFeishuSetupTestPayload(
+  config: FeishuNotificationConfig,
+  message: FeishuSetupTestMessage,
+  timestampSeconds = Math.floor(Date.now() / 1000)
+): Record<string, unknown> {
+  return applySignature(
+    config,
+    {
+      msg_type: "post",
+      content: {
+        post: {
+          zh_cn: {
+            title: "✅ Governed C2C 通知测试",
+            content: [
+              [{ tag: "text", text: `项目：${message.workspaceName}` }],
+              [{ tag: "text", text: "状态：飞书通知通道已连通" }],
+              [
+                {
+                  tag: "text",
+                  text: "说明：这是一条配置测试消息，不代表存在待授权动作，也不能在飞书中授权执行。",
+                },
+              ],
+            ],
+          },
+        },
+      },
+    },
+    timestampSeconds
+  );
+}
+
+async function sendFeishuPayload(params: {
   config: FeishuNotificationConfig;
-  message: FeishuGateMessage;
+  payload: Record<string, unknown>;
   fetchImpl?: typeof fetch;
-  timestampSeconds?: number;
 }): Promise<void> {
   const fetchImpl = params.fetchImpl ?? fetch;
   const normalizedWebhookUrl = normalizeFeishuWebhookUrl(params.config.webhookUrl);
-  const response = await fetchImpl(normalizedWebhookUrl, {
-    method: "POST",
-    headers: { "content-type": "application/json; charset=utf-8" },
-    body: JSON.stringify(
-      buildFeishuGatePayload(params.config, params.message, params.timestampSeconds)
-    ),
-    signal: AbortSignal.timeout(5_000),
-  });
+  let response: Response;
+  try {
+    response = await fetchImpl(normalizedWebhookUrl, {
+      method: "POST",
+      headers: { "content-type": "application/json; charset=utf-8" },
+      body: JSON.stringify(params.payload),
+      signal: AbortSignal.timeout(5_000),
+    });
+  } catch {
+    throw new Error("Feishu notification delivery failed");
+  }
 
   const body = (await response.json().catch(() => null)) as
     | { code?: number; msg?: string; StatusCode?: number; StatusMessage?: string }
@@ -72,4 +120,30 @@ export async function sendFeishuGateNotification(params: {
   if (!response.ok || code !== 0) {
     throw new Error(`Feishu webhook rejected notification (HTTP ${response.status}, code ${code})`);
   }
+}
+
+export async function sendFeishuGateNotification(params: {
+  config: FeishuNotificationConfig;
+  message: FeishuGateMessage;
+  fetchImpl?: typeof fetch;
+  timestampSeconds?: number;
+}): Promise<void> {
+  await sendFeishuPayload({
+    config: params.config,
+    payload: buildFeishuGatePayload(params.config, params.message, params.timestampSeconds),
+    fetchImpl: params.fetchImpl,
+  });
+}
+
+export async function sendFeishuSetupTestNotification(params: {
+  config: FeishuNotificationConfig;
+  message: FeishuSetupTestMessage;
+  fetchImpl?: typeof fetch;
+  timestampSeconds?: number;
+}): Promise<void> {
+  await sendFeishuPayload({
+    config: params.config,
+    payload: buildFeishuSetupTestPayload(params.config, params.message, params.timestampSeconds),
+    fetchImpl: params.fetchImpl,
+  });
 }

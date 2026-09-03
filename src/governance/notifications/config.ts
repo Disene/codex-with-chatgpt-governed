@@ -10,6 +10,13 @@ export interface FeishuNotificationConfig {
   updatedAt: string;
 }
 
+export type FeishuConfigSource = "workspace" | "global";
+
+export interface EffectiveFeishuConfig {
+  config: FeishuNotificationConfig | null;
+  source: FeishuConfigSource | null;
+}
+
 const ALLOWED_HOSTS = new Set(["open.feishu.cn", "open.larksuite.com"]);
 
 export function normalizeFeishuWebhookUrl(value: string): string {
@@ -27,8 +34,19 @@ export function feishuConfigFile(workspaceId: string): string {
   return path.join(getStateDir(), "governance-notifications", `${workspaceId}.json`);
 }
 
+export function feishuGlobalConfigFile(): string {
+  return path.join(getStateDir(), "governance-notifications", "default.json");
+}
+
+export function readEffectiveFeishuConfig(workspaceId: string): EffectiveFeishuConfig {
+  const workspace = readJsonIfExists<FeishuNotificationConfig>(feishuConfigFile(workspaceId));
+  if (workspace) return { config: workspace, source: "workspace" };
+  const global = readJsonIfExists<FeishuNotificationConfig>(feishuGlobalConfigFile());
+  return global ? { config: global, source: "global" } : { config: null, source: null };
+}
+
 export function readFeishuConfig(workspaceId: string): FeishuNotificationConfig | null {
-  return readJsonIfExists<FeishuNotificationConfig>(feishuConfigFile(workspaceId));
+  return readEffectiveFeishuConfig(workspaceId).config;
 }
 
 export function writeFeishuConfig(
@@ -53,6 +71,25 @@ export function clearFeishuConfig(workspaceId: string): void {
   } catch {
     // best effort
   }
+}
+
+export function writeGlobalFeishuConfig(
+  input: { webhookUrl: string; secret?: string; enabled?: boolean },
+  now = new Date().toISOString()
+): FeishuNotificationConfig {
+  const config: FeishuNotificationConfig = {
+    version: 1,
+    enabled: input.enabled ?? true,
+    webhookUrl: normalizeFeishuWebhookUrl(input.webhookUrl),
+    secret: input.secret?.trim() || undefined,
+    updatedAt: now,
+  };
+  writeSecureJson(feishuGlobalConfigFile(), config);
+  return config;
+}
+
+export function clearGlobalFeishuConfig(): void {
+  fs.rmSync(feishuGlobalConfigFile(), { force: true });
 }
 
 export function feishuConfigSummary(config: FeishuNotificationConfig | null): {
