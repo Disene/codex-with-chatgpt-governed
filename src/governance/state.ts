@@ -2,6 +2,7 @@ import path from "node:path";
 import { getStateDir, readJsonIfExists, writeSecureJson } from "../config/paths.js";
 import type { EffectDescriptor } from "./effects.js";
 import type { HumanGate } from "./gate/authorization.js";
+import type { PresenceMode } from "./presence/resolver.js";
 
 export type GovernanceMode = "normal" | "safe";
 
@@ -9,6 +10,7 @@ export interface GovernanceState {
   version: 1;
   workspaceId: string;
   mode: GovernanceMode;
+  presenceMode?: PresenceMode;
   currentEffect?: EffectDescriptor;
   gate?: HumanGate;
   updatedAt: string;
@@ -38,6 +40,14 @@ export function writeGovernanceState(state: GovernanceState): GovernanceState {
 
 export function setGovernanceMode(state: GovernanceState, mode: GovernanceMode): GovernanceState {
   return { ...state, mode, updatedAt: new Date().toISOString() };
+}
+
+export function getPresenceMode(state: GovernanceState): PresenceMode {
+  return state.presenceMode === "PRESENT" || state.presenceMode === "AWAY" ? state.presenceMode : "AUTO";
+}
+
+export function setPresenceMode(state: GovernanceState, presenceMode: PresenceMode): GovernanceState {
+  return { ...state, presenceMode, updatedAt: new Date().toISOString() };
 }
 
 export function externalWritesAllowed(state: GovernanceState): boolean {
