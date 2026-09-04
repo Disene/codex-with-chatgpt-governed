@@ -160,6 +160,26 @@ describe("Collaboration Contract & Chinese UX V1", () => {
     expect(protocolProjectInstructions).toMatch(/不检索无关文件/);
   });
 
+  it("scopes C2C connector exclusivity without banning unrelated apps and records host recovery", () => {
+    expect(protocolProjectInstructions).toMatch(/不得使用其他 workspace 的 C2C connector/);
+    expect(protocolProjectInstructions).toMatch(
+      /GitHub、Web[\s\S]*其他非 C2C app[\s\S]*可以正常使用/
+    );
+    expect(protocolProjectInstructions).toMatch(
+      /不得替代上述 C2C connector[\s\S]*live local workspace 事实来源/
+    );
+    expect(bootPrompt).toMatch(/GitHub、Web[\s\S]*其他非 C2C app/);
+    expect(bootPrompt).toMatch(/不得使用其他 workspace 的 C2C connector/);
+    expect(coreSkill).toMatch(/connector exclusivity is only among[\s\S]*C2C workspace connectors/i);
+    expect(coreSkill).toMatch(/Project binding \/ host app-registry recovery/);
+    expect(coreSkill).toMatch(/do not treat it as connector[\s\S]*repair/i);
+    expect(operatingModel).toMatch(/## Connector and app authority/);
+    expect(operatingModel).toMatch(/conversation-level app-registry failure/i);
+    expect(operatingModel).toMatch(/new Chat in the same verified Project/);
+    expect(projectSetup).toMatch(/Conversation app-registry drift/);
+    expect(projectSetup).toMatch(/Do not[\s\S]*rebuild\/re-pair the C2C connector/i);
+  });
+
   it("relays Issue-backed tasks through compact TASK_CONTEXT without direct ChatGPT Issue reads", () => {
     const contract = `${protocol}\n${coreSkill}`;
     expect(contract).toMatch(/Issue-backed task[\s\S]*Codex reads the current (GitHub )?Issue itself/);
@@ -173,10 +193,10 @@ describe("Collaboration Contract & Chinese UX V1", () => {
   it("preserves connector identity, fact-type authority, HANDOFF continuity, and L3-only gates", () => {
     expect(protocolProjectInstructions).toContain("Workspace name: {{workspace_name}}");
     expect(protocolProjectInstructions).toContain(
-      "Connector (use this one only): {{connector_name}}"
+      "C2C connector（仅用于当前本地 workspace 事实）: {{connector_name}}"
     );
     expect(protocolProjectInstructions).toMatch(
-      /repository\/runtime 当前事实[\s\S]*connector 读取的 live code/
+      /repository\/runtime 当前事实[\s\S]*绑定的 C2C connector 读取的 live code/
     );
     expect(protocolProjectInstructions).toMatch(
       /当前任务意图、约束与成功标准[\s\S]*`TASK_CONTEXT` \/ HANDOFF/
