@@ -74,7 +74,10 @@ while existing C2C machine tokens, enums, and field names stay in English.
      Codex conversation's chat URL just because `session.url` exists.
    Each workspace also has exactly ONE ChatGPT connector. Do not create a
    second connector for the same workspace. Other workspaces may have their
-   own connectors — never edit those.
+   own connectors — never edit those. This connector exclusivity is only among
+   C2C workspace connectors: GitHub, Web, and other non-C2C apps may be used
+   when the task needs them, but they never replace the bound C2C connector as
+   the source of live local-workspace facts.
 7. After first-time setup, never ask the user to approve writing C2C's local
    settings directory. Run `c2c sandbox-allow --json` (idempotent). If it fails
    with EPERM / Operation not permitted, request elevated permissions and retry
@@ -203,8 +206,10 @@ commands (both are cheap / cached; never mention them unless an update exists):
 
 - **Lifecycle only:** For setup, update, reconnect, repair, or disconnect, read
   [setup-and-repair.md](references/setup-and-repair.md) before acting.
-- **Project binding only:** For first Bind Project or Project repair, read
-  [project-setup.md](references/project-setup.md) before acting.
+- **Project binding / host app-registry recovery:** For first Bind Project,
+  Project repair, or the confirmed conversation-level app-registry symptom
+  described below, read [project-setup.md](references/project-setup.md) before
+  acting.
 - **Normal coding:** read neither reference unless the current observed state
   enters one of those explicit branches.
 
@@ -277,9 +282,13 @@ One ChatGPT Project per workspace. Mapping:
 **Update it**: same `c2c session set --task / --iteration / --state` as long-chat.
 
 **Project binding or repair**: if the expected collection is missing/wrong, a
-new chat lands outside it, or Project identity/settings drift, read
-[project-setup.md](references/project-setup.md). Normal coding in an already
-bound Project does not load that reference.
+new chat lands outside it, Project identity/settings drift, or the confirmed
+conversation-level app-registry symptom occurs, read
+[project-setup.md](references/project-setup.md). The app-registry symptom is:
+an unrelated app disappears from both `@` resolution and the current Chat's
+Apps picker, that app remains installed/enabled, and a new Chat in the same
+Project exposes it normally. For that symptom, do not treat it as connector
+repair. Normal coding in an already bound Project does not load this reference.
 
 **Saved chat 404s** (this thread): navigate to the collection, open a new chat
 there, boot + HANDOFF from `session.checkpoint` (no logs) + workspace_info,
