@@ -265,12 +265,16 @@ For an Issue-backed task, Codex refreshes only the material `TASK_CONTEXT` from
 the current Codex-read Issue; it does not paste the Issue or ask ChatGPT to read
 it. Authority depends on the fact type:
 
-- repository/runtime facts: the live connector wins;
+- repository/runtime facts: the bound C2C connector wins;
 - current task intent, constraints, and success criteria: current
   `TASK_CONTEXT` / HANDOFF wins;
 - stable workflow and workspace identity: Project instructions win;
 - account/Project memory: advisory context only; stale or conflicting memory
   loses to the applicable live or current-task source.
+
+GitHub, Web, and other non-C2C apps may still be used for task-relevant facts
+when available; they do not replace the bound C2C connector for live local
+workspace facts.
 
 ```
 [C2C]
@@ -298,6 +302,17 @@ NEXT_EXPECTED_STEP:
 通过 git_diff 独立审查 iteration 4，并回复 PLAN 或 DONE。
 ```
 
+### Host app-registry recovery (Project mode)
+
+If an existing C2C Chat loses an unrelated app such as GitHub from both `@`
+resolution and the Apps picker, the app is still installed/enabled, and a new
+Chat in the same verified Project exposes it normally, treat the old Chat as a
+host conversation-state failure. Do not rebuild/re-pair the C2C connector and
+do not change Project settings solely for this symptom. Create a new Chat from
+the same Project, send the Boot Prompt plus HANDOFF/material `TASK_CONTEXT` when
+continuing a task, verify `workspace_info` through the exact bound C2C
+connector, then continue only after workspace identity matches.
+
 ## Loop limits
 
 `maxIterations` (default 12, configurable in `.c2c.json`). When reached, Codex
@@ -321,9 +336,12 @@ Send once at the start of every new C2C conversation:
 Codex 负责本地调查、实现、测试与已授权执行。Human 只处理真实 L3 授权、
 真正的产品/业务选择、登录/2FA/CAPTCHA，以及必须亲自输入的凭证。
 
-通过当前绑定的 connector/MCP 重新读取 live workspace 的代码、git diff、
+通过当前绑定的 C2C connector/MCP 重新读取 live workspace 的代码、git diff、
 测试与已释放输出；不要要求 Codex 或 Human 粘贴 MCP 已可读取的文件、diff 或日志。
-若位于 ChatGPT Project，只使用 Project instructions 指定的 connector；workspace 错误即停止。
+若位于 ChatGPT Project，本地 workspace 事实只使用 Project instructions 指定的 C2C connector；
+不得使用其他 workspace 的 C2C connector。GitHub、Web 及其他非 C2C app 在任务需要且
+host 可用时可以正常使用，但不得替代该 connector 作为 live local workspace 事实来源。
+workspace 错误即停止。
 
 PLAN、review、HANDOFF 与 Human-facing 解释的语义内容默认使用简体中文；
 `[C2C]`、`STATE`、`INIT`、`PLAN`、`EXECUTED`、`DONE`、`BLOCKED`、`HANDOFF`、
@@ -352,26 +370,28 @@ Codex 负责实现与执行。
 本 Project 仅绑定：
 - Workspace name: {{workspace_name}}
 - Kind: {{project_type}} ({{languages}} / {{frameworks}})
-- Connector (use this one only): {{connector_name}}
+- C2C connector（仅用于当前本地 workspace 事实）: {{connector_name}}
 
-调用工具时只使用上述 connector，不得使用其他 Codex with ChatGPT connector。
+对于当前本地 workspace 的代码、git、diff、测试和已释放 command output，只使用上述
+Codex with ChatGPT connector；不得使用其他 workspace 的 C2C connector 作为这些事实来源。
+GitHub、Web 及其他非 C2C app 不受上述排他规则限制；当前任务需要且 host 可用时可以正常使用，
+但不得替代上述 C2C connector 作为 live local workspace 事实来源。
 若 workspace_info 返回不同 workspace，立即停止，不做 PLAN，也不使用本 Project memory。
-通过 connector 读取代码、git、diff、测试和已释放的 command output；不要要求任何人
-粘贴可由 MCP 读取的文件、diff 或日志。`EXECUTED` 后，有 readable 项时对
+不要要求任何人粘贴可由 MCP 读取的文件、diff 或日志。`EXECUTED` 后，有 readable 项时对
 execution_output 先 list 再 read；若 restricted，则改从 git 审查。不得把 repo 上传到
 本 Project 的 files 或 sources。
 Library 可用不构成搜索或使用任意 Library 内容的授权；仅在当前任务明确需要或 Human
 明确请求时使用相关内容，不检索无关文件。
 
 按事实类型确定权威来源：
-- repository/runtime 当前事实：以 connector 读取的 live code、git、diff 与测试为准；
+- repository/runtime 当前事实：以绑定的 C2C connector 读取的 live code、git、diff 与测试为准；
 - 当前任务意图、约束与成功标准：以当前 `TASK_CONTEXT` / HANDOFF 为准；
 - 稳定 workflow 与 workspace identity：以本 Project instructions 为准；
 - ChatGPT account/Project memory：只作较广背景的 advisory context；陈旧或冲突时，必须让位于
   对应的 live source 或当前任务上下文。
 
 HANDOFF 表示继续同一任务；`TASK_CONTEXT` 只携带完成当前任务所需的精简语义。按
-NEXT_EXPECTED_STEP 恢复前，通过 connector 重新读取需要的 live code、diff 与测试事实。
+NEXT_EXPECTED_STEP 恢复前，通过绑定的 C2C connector 重新读取需要的 live code、diff 与测试事实。
 
 角色与交付：
 - ChatGPT 理解目标与约束，做高层架构/产品决策、scope 判断与真实风险分类，给出有限、
