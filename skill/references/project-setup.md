@@ -1,10 +1,10 @@
 # Project setup and repair
 
 Read this reference only for first Bind Project, an explicit switch from
-long-chat to Project, or Project collection/identity/settings repair. Normal
-coding in an already bound Project does not preload it. The core Skill's
-workspace/connector identity, browser-capability, HANDOFF, and resume rules
-remain authoritative.
+long-chat to Project, Project collection/identity/settings repair, or a
+confirmed conversation-level app-registry recovery. Normal coding in an
+already bound Project does not preload it. The core Skill's workspace/connector
+identity, browser-capability, HANDOFF, and resume rules remain authoritative.
 
 ## Bind Project (user creates the collection once)
 
@@ -56,26 +56,28 @@ Codex 负责实现与执行。
 本 Project 仅绑定：
 - Workspace name: {{workspace_name}}
 - Kind: {{project_type}} ({{languages}} / {{frameworks}})
-- Connector (use this one only): {{connector_name}}
+- C2C connector（仅用于当前本地 workspace 事实）: {{connector_name}}
 
-调用工具时只使用上述 connector，不得使用其他 Codex with ChatGPT connector。
+对于当前本地 workspace 的代码、git、diff、测试和已释放 command output，只使用上述
+Codex with ChatGPT connector；不得使用其他 workspace 的 C2C connector 作为这些事实来源。
+GitHub、Web 及其他非 C2C app 不受上述排他规则限制；当前任务需要且 host 可用时可以正常使用，
+但不得替代上述 C2C connector 作为 live local workspace 事实来源。
 若 workspace_info 返回不同 workspace，立即停止，不做 PLAN，也不使用本 Project memory。
-通过 connector 读取代码、git、diff、测试和已释放的 command output；不要要求任何人
-粘贴可由 MCP 读取的文件、diff 或日志。`EXECUTED` 后，有 readable 项时对
+不要要求任何人粘贴可由 MCP 读取的文件、diff 或日志。`EXECUTED` 后，有 readable 项时对
 execution_output 先 list 再 read；若 restricted，则改从 git 审查。不得把 repo 上传到
 本 Project 的 files 或 sources。
 Library 可用不构成搜索或使用任意 Library 内容的授权；仅在当前任务明确需要或 Human
 明确请求时使用相关内容，不检索无关文件。
 
 按事实类型确定权威来源：
-- repository/runtime 当前事实：以 connector 读取的 live code、git、diff 与测试为准；
+- repository/runtime 当前事实：以绑定的 C2C connector 读取的 live code、git、diff 与测试为准；
 - 当前任务意图、约束与成功标准：以当前 `TASK_CONTEXT` / HANDOFF 为准；
 - 稳定 workflow 与 workspace identity：以本 Project instructions 为准；
 - ChatGPT account/Project memory：只作较广背景的 advisory context；陈旧或冲突时，必须让位于
   对应的 live source 或当前任务上下文。
 
 HANDOFF 表示继续同一任务；`TASK_CONTEXT` 只携带完成当前任务所需的精简语义。按
-NEXT_EXPECTED_STEP 恢复前，通过 connector 重新读取需要的 live code、diff 与测试事实。
+NEXT_EXPECTED_STEP 恢复前，通过绑定的 C2C connector 重新读取需要的 live code、diff 与测试事实。
 
 角色与交付：
 - ChatGPT 理解目标与约束，做高层架构/产品决策、scope 判断与真实风险分类，给出有限、
@@ -130,6 +132,15 @@ Project sources, click 分享, or edit another workspace's connector.
   compare its instructions with the exact current `connectorName`. Repair only
   that field using the full template above. Never paste `mcpUrl` or another
   public/temporary address into Project instructions.
+- **Conversation app-registry drift:** when an unrelated app such as GitHub is
+  missing from both `@` resolution and the current Chat's Apps picker, the app
+  remains installed/enabled, and a new Chat in the same Project exposes it
+  normally, treat the old Chat as a host conversation-state failure. Do not
+  rebuild/re-pair the C2C connector or change Project settings solely for this
+  symptom. Return to the verified collection, create a new Chat there, send the
+  normal boot prompt plus HANDOFF/material `TASK_CONTEXT` when resuming, verify
+  `workspace_info` through the exact bound C2C connector, then save the new chat
+  URL and continue. Preserve the Project and connector binding.
 - **Memory/settings drift:** for a personal, non-shared ordinary Project,
   restore Default memory. Preserve project-only memory only when the user
   explicitly requested isolation or the Project is shared/sensitive. Observe
