@@ -8,7 +8,7 @@ task-history database, evidence bundle, or replacement for an active Issue.
 ## Authority map
 
 - **Repository and runtime facts** come from the live repository, the bound
-  read-only connector/MCP, and current tests or released execution output.
+  read-only C2C connector/MCP, and current tests or released execution output.
 - **Current task intent** — goal, frozen constraints, success criteria, and
   material task decisions — comes from the active Issue plus the current
   Codex-produced `TASK_CONTEXT` or `HANDOFF`.
@@ -62,6 +62,36 @@ remain durable. Do not rotate in the middle of an active PLAN or Human Gate.
 
 Issue bodies are updated only at natural phase boundaries or when a material
 frozen task decision changes. Per-iteration status churn is not durable state.
+
+## Connector and app authority
+
+The Project's connector exclusivity is **C2C-scoped**, not a one-app-only rule.
+For live local-workspace facts — code, git, diff, tests, and released execution
+output — ChatGPT uses the exact Codex with ChatGPT connector bound in that
+Project and never substitutes another workspace's C2C connector.
+
+GitHub, Web, Gmail, Calendar, and other non-C2C apps remain available when the
+current task legitimately needs them and the host exposes them. Those apps do
+not replace or override the bound C2C connector for live local-workspace facts.
+Using a C2C connector must never be interpreted as disabling unrelated apps.
+
+### Conversation-level app-registry failure
+
+Treat an existing Chat as a host conversation-state failure when all three are
+observed together:
+
+1. an unrelated app such as GitHub disappears from both `@` resolution and the
+   Chat's Apps picker;
+2. that app remains installed/enabled at account or plugin level; and
+3. a new Chat in the same verified Project exposes the app normally.
+
+C2C cannot repair the host's internal app registry. For this symptom, do not
+rebuild, delete, rename, or re-pair the workspace connector, and do not alter
+Project memory/settings solely to recover the missing app. Open a new Chat from
+the same verified Project, send the normal Boot Prompt plus HANDOFF/material
+`TASK_CONTEXT` when continuing a task, verify `workspace_info` through the exact
+bound C2C connector, then continue only after the workspace identity matches.
+Preserve the existing Project and connector binding.
 
 ## Privacy and Issue routing
 
