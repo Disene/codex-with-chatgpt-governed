@@ -170,6 +170,9 @@ describe("Collaboration Contract & Chinese UX V1", () => {
     );
     expect(bootPrompt).toMatch(/GitHub、Web[\s\S]*其他非 C2C app/);
     expect(bootPrompt).toMatch(/不得使用其他 workspace 的 C2C connector/);
+    expect(coreSkill).toMatch(/connector exclusivity is only among[\s\S]*C2C workspace connectors/i);
+    expect(coreSkill).toMatch(/Project binding \/ host app-registry recovery/);
+    expect(coreSkill).toMatch(/do not treat it as connector[\s\S]*repair/i);
     expect(operatingModel).toMatch(/## Connector and app authority/);
     expect(operatingModel).toMatch(/conversation-level app-registry failure/i);
     expect(operatingModel).toMatch(/new Chat in the same verified Project/);
